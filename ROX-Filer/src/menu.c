@@ -1875,6 +1875,18 @@ static void select_nth_item(GtkMenuShell *shell, int n)
 	gtk_menu_shell_select_item(shell, item);
 }
 
+static void invoke_permed(DirItem *item, const guchar *path)
+{
+	GError  *error = NULL;
+	char *argv[] = {"PermEd", NULL, NULL};
+	argv[1] = (guchar*)path;
+	if (!g_spawn_async(NULL, argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL, NULL, &error))
+	{
+		delayed_error("Error running PermEd: %s", error->message);
+		g_error_free(error);
+	}
+}
+
 static void file_op(gpointer data, FileOp action, GtkWidget *unused)
 {
 	DirItem	*item;
@@ -1952,8 +1964,14 @@ static void file_op(gpointer data, FileOp action, GtkWidget *unused)
 			usage(window_with_focus);
 			return;
 		case FILE_CHMOD_ITEMS:
-			chmod_items(window_with_focus);
-			return;
+			/* TODO: PermEd for group selection */
+			if (n_selected > 1)
+			{
+				chmod_items(window_with_focus);
+				return;
+			}
+			/* invoke PermEd on single file, see below */
+			break;
 		case FILE_SET_TYPE:
 			set_type_items(window_with_focus);
 			return;
@@ -2042,6 +2060,9 @@ static void file_op(gpointer data, FileOp action, GtkWidget *unused)
 			break;
 		case FILE_SET_ICON:
 			icon_set_handler_dialog(item, path);
+			break;
+		case FILE_CHMOD_ITEMS:
+			invoke_permed(item, path);
 			break;
 		default:
 			g_warning("Unknown action!");
