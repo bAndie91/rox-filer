@@ -437,8 +437,8 @@ static void toolbar_sort_clicked(GtkWidget *widget,
 				    FilerWindow *filer_window)
 {
 	GdkEventButton	*bev;
-	int i, current, next, next_wrapped;
-	gboolean adjust;
+	int i, current, next, backward;
+	gboolean change_dir;
 	GtkSortType dir;
 	gchar *tip;
 
@@ -452,7 +452,8 @@ static void toolbar_sort_clicked(GtkWidget *widget,
 	};
 
 	bev = (GdkEventButton *) get_current_event(GDK_BUTTON_RELEASE);
-	adjust = (bev->button != 1) && bev->type == GDK_BUTTON_RELEASE;
+	change_dir = (bev->button != 1) && bev->type == GDK_BUTTON_RELEASE;
+	backward = (bev->button == 3) && bev->type == GDK_BUTTON_RELEASE;
 	gdk_event_free((GdkEvent *) bev);
 
 	current = -1;
@@ -466,21 +467,26 @@ static void toolbar_sort_clicked(GtkWidget *widget,
 		}
 	}
 
-	if (current == -1)
-		next = 0;
-	else if (adjust)
+	if(backward)
+	{
 		next = current - 1;
-	else
-		next = current + 1;
-
-	next_wrapped = next % G_N_ELEMENTS(sorts);
-
-	if (next_wrapped != next)
+		if(next < 0) next = G_N_ELEMENTS(sorts) - 1;
+	}
+	else if (change_dir)
+	{
 		dir = (dir == GTK_SORT_ASCENDING)
 			? GTK_SORT_DESCENDING : GTK_SORT_ASCENDING;
+		if(current == -1) next = 0;
+		else next = current;
+	}
+	else
+	{
+		next = current + 1;
+		if(next >= G_N_ELEMENTS(sorts)) next = 0;
+	}
 
-	display_set_sort_type(filer_window, sorts[next_wrapped], dir);
- 	tip = g_strconcat(_(sort_names[next_wrapped]), ", ",
+	display_set_sort_type(filer_window, sorts[next], dir);
+	tip = g_strconcat(_(sort_names[next]), ", ",
 			dir == GTK_SORT_ASCENDING 
 				? _("ascending") : _("descending"),
 			NULL);
