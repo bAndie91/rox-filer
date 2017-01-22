@@ -1802,14 +1802,14 @@ void menu_rox_help(gpointer data, guint action, GtkWidget *widget)
 	if (action == HELP_ABOUT)
 		infobox_new(app_dir);
 	else if (action == HELP_DIR)
-		filer_opendir(make_path(app_dir, "Help"), NULL, NULL);
+		filer_opendir(make_path(htmlhelp_dir, "html"), NULL, NULL);
 	else if (action == HELP_MANUAL)
 	{
 		gchar *manual = NULL;
 
 		if (current_lang)
 		{
-			manual = g_strconcat(app_dir, "/Help/Manual-",
+			manual = g_strconcat(htmlhelp_dir, "/html/Manual-",
 					     current_lang, ".html", NULL);
 			if (!file_exists(manual) && strchr(current_lang, '_'))
 			{
@@ -1821,8 +1821,8 @@ void menu_rox_help(gpointer data, guint action, GtkWidget *widget)
 		}
 
 		if (!manual)
-			manual = g_strconcat(app_dir,
-						"/Help/Manual.html", NULL);
+			manual = g_strconcat(htmlhelp_dir,
+						"/html/Manual.html", NULL);
 		
 		run_by_path(manual);
 

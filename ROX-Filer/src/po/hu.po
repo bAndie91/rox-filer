@@ -20,11 +20,11 @@ msgstr "<könyvtár>"
 
 #: abox.c:218
 msgid "_Quiet"
-msgstr "_Csendben"
+msgstr "_Mindet"
 
 #: abox.c:227
 msgid "Quiet"
-msgstr "Csendben"
+msgstr "Mindet"
 
 #: abox.c:227
 msgid "Don't confirm every operation"
@@ -1243,6 +1243,9 @@ msgstr "Rendezési szempont és irány"
 #: toolbar.c:141
 msgid "Details"
 msgstr "Részletek"
+
+msgid "Find file..."
+msgstr "Keresés..."
 
 #: filer.c:3450
 #: tips:119
@@ -2926,8 +2929,8 @@ msgstr "Rossz szimlink (vagy nincs jogosultságod a követésére): %s"
 
 #: run.c:573
 #, c-format
-msgid "No run action specified for files of this type (%s/%s) - you can set a run action by choosing `Set Run Action' from the File menu, or you can just drag the file to an application.%s"
-msgstr "Nincs hozzárendelve program ehhez a fájltípushoz (%s/%s). Rendelj hozzá egy programot a \"Fájl\" menü \"Program hozzárendelése\" parancsával, vagy pedig egyszerűen dobd rá a fájlt egy programra.%s"
+msgid "No run action specified for files of this type (%s/%s) - you can set a run action by choosing `Set Run Action' from the File menu, or you can just drag the file to an application.\nTrying to open by XDG.%s"
+msgstr "Nincs hozzárendelve program ehhez a fájltípushoz (%s/%s). Rendelj hozzá egy programot a \"Fájl\" menü \"Program hozzárendelése\" parancsával, vagy pedig egyszerűen dobd rá a fájlt egy programra.\nMegpróbálom XDG-vel megnyitni.%s"
 
 #: run.c:579
 msgid ""

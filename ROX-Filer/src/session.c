@@ -140,7 +140,7 @@ void session_init(const gchar *client_id)
 	}
 	else
 	{
-		bin_path = g_strconcat(app_dir, "/AppRun", NULL);
+		bin_path = g_strconcat("", "/rox", NULL);
 		clone_cmd[0] = bin_path;
 		clone_cmd[1] = "-n";
 		clone_cmd[2] = NULL;

@@ -319,7 +319,7 @@ static void toolbar_help_clicked(GtkWidget *widget, FilerWindow *filer_window)
 			((GdkEventButton *) event)->button != 1)
 		menu_rox_help(NULL, HELP_MANUAL, NULL);
 	else
-		filer_opendir(make_path(app_dir, "Help"), NULL, NULL);
+		filer_opendir(make_path(htmlhelp_dir, "html"), NULL, NULL);
 	gdk_event_free(event);
 }
 

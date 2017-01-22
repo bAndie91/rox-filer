@@ -99,11 +99,11 @@ void choices_init(void)
 		saving_disabled = FALSE;
 		
 		dir_list = g_new(gchar *, 4);
-		dir_list[0] = g_build_filename(g_get_home_dir(), "Choices",
-					       NULL);
-		dir_list[1] = g_strdup("/usr/local/share/Choices");
-		dir_list[2] = g_strdup("/usr/share/Choices");
-		dir_list[3] = NULL;
+                dir_list[0] = g_build_filename(g_get_home_dir(),".Choices", NULL);
+                dir_list[1] = g_strdup("/usr/local/share/rox/Choices");
+                dir_list[2] = g_strdup("/usr/share/rox/Choices");
+                dir_list[3] = NULL;
+
 	}
 
 	/* Initialize new system */

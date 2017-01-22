@@ -53,14 +53,12 @@ void i18n_init(void)
 {
 	const char *lang;
 
-	gtk_set_locale();
 
-#ifdef HAVE_LIBINTL_H
-	gchar *path = g_strdup_printf("%s/Messages", app_dir);
-	bindtextdomain("ROX-Filer", path);
-	bind_textdomain_codeset("ROX-Filer", "UTF-8");
+	gchar *path = g_strdup_printf("/usr/share/locale");
+	bindtextdomain("rox", path);
+	bind_textdomain_codeset("rox", "UTF-8");
 	g_free(path);
-#endif
+	gtk_set_locale();
 
 	/* This is a hang-over from when we did translations ourselves.
 	 * Maybe we can get this info from the gettext library?

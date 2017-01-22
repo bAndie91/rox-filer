@@ -3,6 +3,9 @@
 #define PROJECT "ROX-Filer"
 #define VERSION "Unknown"
 #define GTK_VERSION "Unknown"
+#define APP_DIR "/usr/share/rox"
+#define HTMLHELP_DIR "/usr/share/doc/rox-filer"
+extern const char *htmlhelp_dir;
 
 #undef STDC_HEADERS
 #undef HAVE_SYS_UCRED_H
@@ -49,7 +52,7 @@
 
 #ifdef HAVE_LIBINTL_H
 # include <libintl.h>
-# define _(String) dgettext("ROX-Filer", String)
+# define _(String) dgettext("rox", String)
 #else
 # define _(String) (String)
 #endif

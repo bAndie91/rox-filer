@@ -89,7 +89,7 @@ gid_t *supplemental_groups = NULL;
 const gchar *show_user_message = NULL;
 
 int home_dir_len;
-const char *home_dir, *app_dir;
+const char *home_dir, *app_dir, *htmlhelp_dir;
 
 GtkTooltips *tooltips = NULL;
 
@@ -103,10 +103,10 @@ GtkTooltips *tooltips = NULL;
 		"see the file named COPYING.\n")
 
 #ifdef HAVE_GETOPT_LONG
-#  define USAGE   N_("Try `ROX-Filer/AppRun --help' for more information.\n")
+#  define USAGE   N_("Try `rox --help' for more information.\n")
 #  define SHORT_ONLY_WARNING ""
 #else
-#  define USAGE   N_("Try `ROX-Filer/AppRun -h' for more information.\n")
+#  define USAGE   N_("Try `rox -h' for more information.\n")
 #  define SHORT_ONLY_WARNING	\
 		_("NOTE: Your system does not support long options - \n" \
 		"you must use the short versions instead.\n\n")
@@ -114,7 +114,7 @@ GtkTooltips *tooltips = NULL;
 
 #define BUGS_TO "<rox-devel@lists.sourceforge.net>"
 
-#define HELP N_("Usage: ROX-Filer/AppRun [OPTION]... [FILE]...\n"	\
+#define HELP N_("Usage: rox [OPTION]... [FILE]...\n"	\
        "Open each directory or file listed, or the current working\n"	\
        "directory if no arguments are given.\n\n"			\
        "  -b, --border=PANEL	open PANEL as a border panel\n"	\
@@ -280,7 +280,8 @@ int main(int argc, char **argv)
 
 	home_dir = g_get_home_dir();
 	home_dir_len = strlen(home_dir);
-	app_dir = g_strdup(getenv("APP_DIR"));
+	app_dir = g_strdup(APP_DIR);
+	htmlhelp_dir = g_strdup(HTMLHELP_DIR);
 
 	/* Get internationalisation up and running. This requires the
 	 * choices system, to discover the user's preferred language.
@@ -289,20 +290,6 @@ int main(int argc, char **argv)
 	options_init();
 	i18n_init();
 	xattr_init();
-
-	if (!app_dir)
-	{
-		g_warning("APP_DIR environment variable was unset!\n"
-			"Use the AppRun script to invoke ROX-Filer...\n");
-		app_dir = g_get_current_dir();
-	}
-#ifdef HAVE_UNSETENV 
-	else
-	{
-		/* Don't pass it on to our child processes... */
-		unsetenv("APP_DIR");
-	}
-#endif
 
 	/* Sometimes we want to take special action when a child
 	 * process exits. This hash table is used to convert the

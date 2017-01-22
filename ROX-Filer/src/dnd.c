@@ -167,7 +167,7 @@ void dnd_init(void)
 	option_add_int(&o_dnd_middle_menu, "dnd_middle_menu", TRUE);
 
 	option_add_string(&o_dnd_uri_handler, "dnd_uri_handler",
-			"xterm -e wget $1");
+			"x-terminal-emulator -e wget $1");
 }
 
 /*			SUPPORT FUNCTIONS			*/
