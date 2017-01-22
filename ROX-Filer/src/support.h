@@ -71,5 +71,6 @@ gboolean get_values_from_desktop_file(const char *path,
 				      gchar **value, ...);
 gchar *build_command_with_path(const char *cmd, const char *path);
 gchar *find_app(const char *appname);
+int mkdir_recursive(const char*, mode_t);
 
 #endif /* _SUPPORT_H */

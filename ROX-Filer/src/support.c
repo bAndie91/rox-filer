@@ -1763,3 +1763,26 @@ gchar *find_app(const char *appname)
   g_strfreev(search);
   return app;
 }
+
+int mkdir_recursive(const char *pathname, mode_t mode)
+{
+	int ret;
+	ret = mkdir(pathname, mode);
+	if(ret == -1 && errno == ENOENT) {
+		gchar* parent;
+		gchar* slash;
+		int ret2;
+		
+		slash = strrchr(pathname, '/');
+		if (slash) {
+			parent = g_strndup(pathname, slash - pathname);
+			ret2 = mkdir_recursive(parent, mode);
+			g_free(parent);
+			if(ret2 == -1) {
+				return ret2;
+			}
+			ret = mkdir(pathname, mode);
+		}
+	}
+	return ret;
+}

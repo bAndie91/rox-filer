@@ -1353,7 +1353,7 @@ void menu_show_options(gpointer data, guint action, GtkWidget *widget)
 static gboolean new_directory_cb(GObject *savebox,
 				 const gchar *initial, const gchar *path)
 {
-	if (mkdir(path, S_IRWXU | S_IRWXG | S_IRWXO))
+	if (mkdir_recursive(path, S_IRWXU | S_IRWXG | S_IRWXO))
 	{
 		report_error("mkdir: %s", g_strerror(errno));
 		return FALSE;
@@ -1363,10 +1363,16 @@ static gboolean new_directory_cb(GObject *savebox,
 
 	if (filer_exists(window_with_focus))
 	{
-		guchar	*leaf;
-		leaf = strrchr(path, '/');
-		if (leaf)
-			display_set_autoselect(window_with_focus, leaf + 1);
+		int len = strlen(window_with_focus->sym_path);
+		if(strncmp(window_with_focus->sym_path, path, len)==0 && strlen(path)>len && path[len]=='/')
+		{
+			guchar	*leaf;
+			leaf = g_strndup(path+len+1, strchr(path+len+1, '/') - (path+len+1));
+			if (leaf) {
+				display_set_autoselect(window_with_focus, leaf);
+				g_free(leaf);
+			}
+		}
 	}
 	
 	return TRUE;
@@ -1375,11 +1381,28 @@ static gboolean new_directory_cb(GObject *savebox,
 static void new_directory(gpointer data, guint action, GtkWidget *widget)
 {
 	g_return_if_fail(window_with_focus != NULL);
+	gchar *prompt_str;
+	ViewIter cursor;
+	DirItem *item;
+	GList *paths;
 
+	paths = filer_selected_items(window_with_focus);
+	view_get_cursor(window_with_focus->view, &cursor);
+	item = cursor.peek(&cursor);
+	if(item) {
+		prompt_str = item->leafname;
+	} else {
+		if(g_list_length(paths) == 1) {
+			prompt_str = g_list_nth_data(paths, 0);
+		} else {
+			prompt_str = _("NewDir");
+		}
+	}
 	savebox_show(_("Create"),
-		make_path(window_with_focus->sym_path, _("NewDir")),
+		make_path(window_with_focus->sym_path, prompt_str),
 		type_to_icon(inode_directory), new_directory_cb,
 		GDK_ACTION_COPY);
+	destroy_glist(&paths);
 }
 
 static gboolean new_file_cb(GObject *savebox,
