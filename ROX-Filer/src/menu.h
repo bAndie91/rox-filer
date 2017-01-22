@@ -6,6 +6,8 @@
 #ifndef _MENU_H
 #define _MENU_H
 
+#include "callback.h"
+
 /* 'action's for menu_rox_help */
 enum {HELP_ABOUT, HELP_DIR, HELP_MANUAL};
 

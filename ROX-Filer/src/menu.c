@@ -476,10 +476,13 @@ GtkWidget *make_send_to_item(DirItem *ditem, const char *label,
 	return item;
 }
 
-static GList *menu_from_dir(GtkWidget *menu, const gchar *dir_name,
+void dummy_func(void*x){}
+
+//static
+GList *menu_from_dir(GtkWidget *menu, const gchar *dir_name,
 			    MenuIconStyle style, CallbackFn func,
 			    gboolean separator, gboolean strip_ext,
-			    gboolean recurse)
+			    gboolean recurse, gboolean signal_connect_method_is_data)
 {
 	GList *widgets = NULL;
 	DirItem *ditem;
@@ -536,10 +539,12 @@ static GList *menu_from_dir(GtkWidget *menu, const gchar *dir_name,
 
 			sub = gtk_menu_new();
 			new_widgets = menu_from_dir(sub, fname, style, func,
-						separator, strip_ext, TRUE);
+						separator, strip_ext, TRUE, signal_connect_method_is_data);
 			g_list_free(new_widgets);
 			gtk_menu_item_set_submenu(GTK_MENU_ITEM(item), sub);
 		}
+		else if(signal_connect_method_is_data)
+			g_signal_connect_data(item, "activate", G_CALLBACK(func), fname, (GClosureNotify)dummy_func, 0);
 		else
 			g_signal_connect_swapped(item, "activate",
 					G_CALLBACK(func), fname);
@@ -583,7 +588,7 @@ static void update_new_files_menu(MenuIconStyle style)
 	{
 		widgets = menu_from_dir(filer_new_menu, templ_dname, style,
 					(CallbackFn) new_file_type, TRUE, TRUE,
-					FALSE);
+					FALSE, FALSE);
 		g_free(templ_dname);
 	}
 	gtk_widget_show_all(filer_new_menu);
@@ -631,7 +636,8 @@ void menu_popdown(void)
 		gtk_menu_popdown(GTK_MENU(popup_menu));
 }
 
-static MenuIconStyle get_menu_icon_style(void)
+//static
+MenuIconStyle get_menu_icon_style(void)
 {
 	MenuIconStyle mis;
 	int display;
@@ -1583,7 +1589,7 @@ static void add_sendto(GtkWidget *menu, const gchar *type, const gchar *subtype)
 
 		widgets = menu_from_dir(menu, dir, get_menu_icon_style(),
 				(CallbackFn) do_send_to,
-				FALSE, FALSE, TRUE);
+				FALSE, FALSE, TRUE, FALSE);
 
 		if (widgets)
 			gtk_menu_shell_append(GTK_MENU_SHELL(menu),

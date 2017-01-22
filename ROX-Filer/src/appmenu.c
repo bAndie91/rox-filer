@@ -321,23 +321,44 @@ static void customise_type(GtkWidget *item, MIME_type *type)
 			"type (%s/%s)."), type->media_type, type->subtype);
 }
 
-static void build_menu_for_type(MIME_type *type)
+static void build_menu_for_type(MIME_type *type, const int is_file)
 {
-	GPtrArray *names;
-	char *path;
-	int i;
 	char *leaf;
 	GtkWidget *item;
-	DirItem *ditem;
 
 	leaf = g_strconcat(".", type->media_type, "_", type->subtype, NULL);
-	path = choices_find_xdg_path_load(leaf, "SendTo", SITE);
+	build_menu_for_type_add_item(leaf);
+	g_free(leaf);
 
-	if (!path)
-		goto out;
+	leaf = g_strconcat(".", type->media_type, NULL);
+	build_menu_for_type_add_item(leaf);
+	g_free(leaf);
+
+	if(is_file)
+	{
+		leaf = g_strconcat(".file", NULL);
+		build_menu_for_type_add_item(leaf);
+		g_free(leaf);
+	}
+
+	item = gtk_menu_item_new_with_label(_("Customise Menu..."));
+	current_items = g_list_prepend(current_items, item);
+	g_signal_connect(item, "activate", G_CALLBACK(customise_type), type);
+	gtk_widget_show(item);
+}
+
+static void build_menu_for_type_add_item(char *leaf)
+{
+	char *path;
+	GPtrArray *names;
+	DirItem *ditem;
+	int i;
+	GtkWidget *item;
+
+	path = choices_find_xdg_path_load(leaf, "SendTo", SITE);
+	if (!path) return;
 
 	names = list_dir(path);
-
 	ditem = diritem_new("");
 
 	for (i = 0; i < names->len; i++)
@@ -349,23 +370,27 @@ static void build_menu_for_type(MIME_type *type)
 		diritem_restat(full_path, ditem, NULL);
 		
 		item = make_send_to_item(ditem, leaf, MIS_SMALL);
+		
+		if(ditem->base_type == TYPE_DIRECTORY && !(ditem->flags & ITEM_FLAG_APPDIR))
+		{
+			GtkWidget *sub = gtk_menu_new();
+			GList *new_widgets;
+			MenuIconStyle style = get_menu_icon_style();
+			gchar *fname = g_strconcat(full_path, NULL);
+			new_widgets = menu_from_dir(sub, fname, style, send_to, FALSE, FALSE, TRUE, TRUE);
+			g_list_free(new_widgets);
+			gtk_menu_item_set_submenu(GTK_MENU_ITEM(item), sub);
+		}
+		else
+		{
+			g_signal_connect_data(item, "activate", G_CALLBACK(send_to), full_path, (GClosureNotify) g_free, 0);
+		}
 		current_items = g_list_prepend(current_items, item);
 		gtk_widget_show(item);
-		g_signal_connect_data(item, "activate", G_CALLBACK(send_to),
-				full_path, (GClosureNotify) g_free, 0);
 	}
 
 	g_ptr_array_free(names, TRUE);
-
 	g_free(path);
-
-out:
-	item = gtk_menu_item_new_with_label(_("Customise Menu..."));
-	current_items = g_list_prepend(current_items, item);
-	g_signal_connect(item, "activate", G_CALLBACK(customise_type), type);
-	gtk_widget_show(item);
-
-	g_free(leaf);
 }
 
 static inline gboolean is_dir(const char *dir)
@@ -396,7 +421,7 @@ static void build_app_menu(const char *app_dir, DirItem *app_item)
 		else
 		{
 			/* Not an application AND no AppInfo */
-			build_menu_for_type(app_item->mime_type);
+			build_menu_for_type(app_item->mime_type, is_dir(app_dir) ? 0 : 1);
 			return;
 		}
 	}

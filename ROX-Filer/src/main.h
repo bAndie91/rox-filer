@@ -9,16 +9,9 @@
 #include <sys/types.h>
 #include <gtk/gtk.h>
 
-typedef struct _Callback Callback;
-typedef void (*CallbackFn)(gpointer data);
+#include "callback.h"
 
 extern GtkTooltips *tooltips;
-
-struct _Callback
-{
-	CallbackFn	callback;
-	gpointer	data;
-};
 
 extern int number_of_windows;
 extern Option o_override_redirect;
