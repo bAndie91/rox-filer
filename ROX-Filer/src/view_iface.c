@@ -118,7 +118,7 @@ void view_style_changed(ViewIface *obj, int flags)
 	VIEW_IFACE_GET_CLASS(obj)->style_changed(obj, flags);
 }
 
-/* Wink or move the cursor to this item, if present. Return TRUE on
+/* Move the cursor to this item, and wink it. Return TRUE on
  * success (iff leaf was present).
  */
 gboolean view_autoselect(ViewIface *obj, const gchar *leaf)
@@ -135,9 +135,9 @@ gboolean view_autoselect(ViewIface *obj, const gchar *leaf)
 		if (strcmp(item->leafname, leaf) != 0)
 			continue;
 
-		if (view_cursor_visible(obj))
+//		if (view_cursor_visible(obj))
 			view_cursor_to_iter(obj, &iter);
-		else
+//		else
 			view_wink_item(obj, &iter);
 
 		return TRUE;
