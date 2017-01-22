@@ -220,12 +220,10 @@ static GtkItemFactoryEntry filer_menu_def[] = {
 {">",				NULL, NULL, 0, "<Separator>"},
 {">" N_("Set Run Action..."),	"asterisk", file_op, FILE_RUN_ACTION, "<StockItem>", GTK_STOCK_EXECUTE},
 {">" N_("Set Icon..."),		NULL, file_op, FILE_SET_ICON, NULL},
-{">" N_("Properties"),		"<Ctrl>P", file_op, FILE_PROPERTIES, "<StockItem>", GTK_STOCK_PROPERTIES},
-{">" N_("Count"),		NULL, file_op, FILE_USAGE, NULL},
 {">" N_("Set Type..."),		NULL, file_op, FILE_SET_TYPE, NULL},
 {">" N_("Permissions"),		NULL, file_op, FILE_CHMOD_ITEMS, NULL},
-{">",				NULL, NULL, 0, "<Separator>"},
-{">" N_("Find"),		"<Ctrl>F", file_op, FILE_FIND, "<StockItem>", GTK_STOCK_FIND},
+{">" N_("Count"),		NULL, file_op, FILE_USAGE, NULL},
+{">" N_("Properties"),		"<Ctrl>P", file_op, FILE_PROPERTIES, "<StockItem>", GTK_STOCK_PROPERTIES},
 {N_("Select"),	    		NULL, NULL, 0, "<Branch>"},
 {">" N_("Select All"),	    	"<Ctrl>A", select_all, 0, NULL},
 {">" N_("Clear Selection"),	NULL, clear_selection, 0, NULL},
@@ -249,6 +247,8 @@ static GtkItemFactoryEntry filer_menu_def[] = {
 /* {">" N_("New, As User..."),	NULL, new_user, 0, NULL}, */
 
 {">" N_("Close Window"),	"<Ctrl>Q", close_window, 0, "<StockItem>", GTK_STOCK_CLOSE},
+{">",				NULL, NULL, 0, "<Separator>"},
+{">" N_("Find"),		"<Ctrl>F", file_op, FILE_FIND, "<StockItem>", GTK_STOCK_FIND},
 {">",				NULL, NULL, 0, "<Separator>"},
 {">" N_("Enter Path..."),	"slash", mini_buffer, MINI_PATH, NULL},
 {">" N_("Shell Command..."),	"<Shift>exclam", mini_buffer, MINI_SHELL, NULL},
@@ -1072,6 +1072,15 @@ static void find(FilerWindow *filer_window)
 	paths = filer_selected_items(filer_window);
 	action_find(paths);
 	destroy_glist(&paths);
+}
+
+static void find_cwd(FilerWindow *filer_window)
+{
+	GList	*pathlist = NULL;
+	guchar	*cwd = filer_window->sym_path;
+	pathlist = g_list_prepend(pathlist, g_strdup(cwd));
+	action_find(pathlist);
+	destroy_glist(&pathlist);
 }
 
 static gboolean last_symlink_check_relative = TRUE;
@@ -1947,8 +1956,8 @@ static void file_op(gpointer data, FileOp action, GtkWidget *unused)
 				prompt = _("Set permissions on ... ?");
 				break;
 			case FILE_FIND:
-				prompt = _("Search inside ... ?");
-				break;
+				find_cwd(window_with_focus);
+				return;
 			default:
 				g_warning("Unknown action!");
 				return;

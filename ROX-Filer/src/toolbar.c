@@ -86,6 +86,7 @@ static void toolbar_hidden_clicked(GtkWidget *widget,
 				   FilerWindow *filer_window);
 static void toolbar_select_clicked(GtkWidget *widget,
 				   FilerWindow *filer_window);
+static void toolbar_find_clicked(GtkWidget *widget, FilerWindow *filer_window);
 static void toolbar_sort_clicked(GtkWidget *widget,
 				   FilerWindow *filer_window);
 static GtkWidget *add_button(GtkWidget *bar, Tool *tool,
@@ -155,6 +156,10 @@ static Tool all_tools[] = {
 	 toolbar_select_clicked, DROP_NONE, FALSE,
 	 FALSE},
  	
+	{N_("Find"), GTK_STOCK_FIND, N_("Find file..."),
+	 toolbar_find_clicked, DROP_NONE, TRUE,
+	 FALSE},
+
 	{N_("Help"), GTK_STOCK_HELP, N_("Show ROX-Filer help"),
 	 toolbar_help_clicked, DROP_NONE, TRUE,
 	 FALSE},
@@ -528,6 +533,21 @@ static void toolbar_select_clicked(GtkWidget *widget, FilerWindow *filer_window)
 				       filer_window->view);
 	}
 	filer_window->temp_item_selected = FALSE;
+	gdk_event_free(event);
+}
+
+static void toolbar_find_clicked(GtkWidget *widget, FilerWindow *filer_window)
+{
+	GdkEvent	*event;
+
+	event = get_current_event(GDK_BUTTON_RELEASE);
+	if (event->type == GDK_BUTTON_RELEASE && ((GdkEventButton *) event)->button == 1)
+	{
+		GList *paths = NULL;
+		paths = g_list_append(paths, g_strdup_printf("%s", filer_window->real_path));
+		action_find(paths);
+		destroy_glist(&paths);
+	}
 	gdk_event_free(event);
 }
 
