@@ -2091,7 +2091,7 @@ static void file_op(gpointer data, FileOp action, GtkWidget *unused)
 			break;
 		case FILE_OPEN_FILE:
 			filer_openitem(window_with_focus, &iter,
-				OPEN_SAME_WINDOW | OPEN_SHIFT);
+				/* OPEN_SAME_WINDOW | */ OPEN_SHIFT);
 			break;
 		case FILE_RUN_ACTION:
 			run_action(item);

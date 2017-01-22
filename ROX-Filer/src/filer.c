@@ -1286,6 +1286,14 @@ void filer_open_parent(FilerWindow *filer_window)
 	g_free(dir);
 }
 
+void filer_open_new(FilerWindow *filer_window, char *path)
+{
+	char	*dirname;
+	dirname = g_path_get_dirname(path);
+	filer_opendir(dirname, filer_window, NULL);
+	g_free(dirname);
+}
+
 void change_to_parent(FilerWindow *filer_window)
 {
 	char	*dir;
