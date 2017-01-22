@@ -148,7 +148,11 @@ GtkWidget *view_details_new(FilerWindow *filer_window)
 
 	gtk_range_set_adjustment(GTK_RANGE(filer_window->scrollbar),
 		gtk_tree_view_get_vadjustment(GTK_TREE_VIEW(view_details)));
-
+	
+	gtk_range_set_adjustment(GTK_RANGE(filer_window->scrollbar_horiz),
+		gtk_tree_view_get_hadjustment(GTK_TREE_VIEW(view_details)));
+	gtk_widget_show(filer_window->scrollbar_horiz);
+	
 	if (filer_window->sort_type != -1)
 		view_details_sort((ViewIface *) view_details);
 
@@ -1910,7 +1914,9 @@ static gboolean view_details_auto_scroll_callback(ViewIface *view)
 	ViewDetails	*view_details = (ViewDetails *) view;
 	FilerWindow	*filer_window = view_details->filer_window;
 	GtkRange	*scrollbar = (GtkRange *) filer_window->scrollbar;
+	GtkRange	*scrollbar_horiz = (GtkRange *) filer_window->scrollbar_horiz;
 	GtkAdjustment	*adj;
+	GtkAdjustment	*hadj;
 	GdkWindow	*window;
 	gint		x, y, w, h;
 	GdkModifierType	mask;

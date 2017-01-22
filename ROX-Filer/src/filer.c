@@ -262,6 +262,8 @@ void filer_window_set_size(FilerWindow *filer_window, int w, int h)
 		h += filer_window->toolbar->allocation.height;
 	if (filer_window->message)
 		h += filer_window->message->allocation.height;
+	if (filer_window->scrollbar_horiz)
+		h += filer_window->scrollbar_horiz->allocation.height;
 
 	window = filer_window->window;
 
@@ -1480,6 +1482,7 @@ FilerWindow *filer_opendir(const char *path, FilerWindow *src_win,
 	filer_window->view_hbox = NULL;
 	filer_window->view = NULL;
 	filer_window->scrollbar = NULL;
+	filer_window->scrollbar_horiz = NULL;
 	filer_window->auto_scroll = -1;
 	filer_window->window_id = NULL;
 
@@ -1744,6 +1747,7 @@ static void filer_add_widgets(FilerWindow *filer_window, const gchar *wm_class)
 
 	/* Create this now to make the Adjustment before the View */
 	filer_window->scrollbar = gtk_vscrollbar_new(NULL);
+	filer_window->scrollbar_horiz = gtk_hscrollbar_new(NULL);
 
 	vbox = gtk_vbox_new(FALSE, 0);
 	gtk_container_add(GTK_CONTAINER(filer_window->window), vbox);
@@ -1770,6 +1774,8 @@ static void filer_add_widgets(FilerWindow *filer_window, const gchar *wm_class)
 	gtk_box_pack_end(GTK_BOX(hbox),
 			filer_window->scrollbar, FALSE, TRUE, 0);
 	gtk_widget_show(hbox);
+	/* Put horizontal scrollbar under the View */
+	gtk_box_pack_end(GTK_BOX(vbox), filer_window->scrollbar_horiz, FALSE, TRUE, 0);
 	
 	/* If we want a toolbar, create it now */
 	toolbar_update_toolbar(filer_window);

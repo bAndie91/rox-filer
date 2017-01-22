@@ -194,6 +194,9 @@ GtkWidget *view_collection_new(FilerWindow *filer_window)
 				 
 	gtk_range_set_adjustment(GTK_RANGE(filer_window->scrollbar),
 				 view_collection->collection->vadj);
+	
+	gtk_widget_hide(filer_window->scrollbar_horiz);
+	filer_window->scrollbar_horiz->allocation.height = 0;
 
 	return GTK_WIDGET(view_collection);
 }
