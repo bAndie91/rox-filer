@@ -564,23 +564,29 @@ static gboolean follow_symlink(const char *full_path,
 /* Load this file into an appropriate editor */
 static gboolean open_file(const guchar *path, MIME_type *type)
 {
+	gchar *argv[] = {"mimeopen-gui", NULL, NULL};
 	g_return_val_if_fail(type != NULL, FALSE);
 
 	if (type_open(path, type))
 		return TRUE;
 
+	/*
 	report_error(
 		_("No run action specified for files of this type (%s/%s) - "
 		"you can set a run action by choosing `Set Run Action' "
 		"from the File menu, or you can just drag the file to an "
-		"application.%s"),
+		"application.\nTrying to open by XDG.%s"),
 		type->media_type,
 		type->subtype,
 		type->executable ? _("\n\nNote: If this is a computer program which "
 				   "you want to run, you need to set the execute bit "
 				   "by choosing Permissions from the File menu.")
 				: "");
-
+	*/
+	
+	argv[1] = path;
+	rox_spawn(home_dir, (const gchar **) argv);
+	
 	return FALSE;
 }
 
