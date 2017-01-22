@@ -52,6 +52,7 @@
 #include "type.h"
 #include "xtypes.h"
 #include "log.h"
+#include "findhistory.h"
 
 #if defined(HAVE_GETXATTR)
 # define ATTR_MAN_PAGE N_("See the attr(5) man page for full details.")
@@ -86,8 +87,8 @@ struct _GUIside
 	gboolean	show_info;	/* For Disk Usage */
 
 	guchar		**default_string; /* Changed when the entry changes */
-	void		(*entry_string_func)(GtkWidget *widget,
-					     const guchar *string);
+	void		(*entry_string_func)(GtkWidget *widget, const guchar *string);
+	void		(*response_func)(GtkWidget*, const gint*);
 
 	int		abort_attempts;
 };
@@ -567,6 +568,9 @@ static void response(GtkDialog *dialog, gint response, GUIside *gui_side)
 	if (!gui_side->to_child)
 		return;
 
+	if (gui_side->response_func)
+		gui_side->response_func(gui_side, response);
+
 	if (response == GTK_RESPONSE_YES)
 		code = 'Y';
 	else if (response == GTK_RESPONSE_NO)
@@ -848,6 +852,7 @@ static GUIside *start_action(GtkWidget *abox, ActionChild *func, gpointer data,
 	gui_side->default_string = NULL;
 	gui_side->entry_string_func = NULL;
 	gui_side->abort_attempts = 0;
+	gui_side->response_func = NULL;
 
 	gui_side->abox = ABOX(abox);
 	g_signal_connect(abox, "destroy",
@@ -1863,6 +1868,52 @@ static void find_cb(gpointer data)
 	send_done();
 }
 
+static GList* find_load_history()
+{
+	GList *find_history_list = NULL;
+	xmlNode *node;
+	
+	free(last_find_string);
+	last_find_string = NULL;
+	
+	findhistory_load();
+	node = xmlDocGetRootElement(findhistory->doc);
+	for (node = node->xmlChildrenNode; node; node = node->next)
+	{
+		gchar *this_string;
+		gchar *this_entry;
+		
+		if (node->type != XML_ELEMENT_NODE) continue;
+		if (strcmp(node->name, "entry") != 0) continue;
+		this_string = xmlNodeListGetString(findhistory->doc, node->xmlChildrenNode, 1);
+		if (!this_string) continue;
+		this_entry = g_strdup(this_string);
+		find_history_list = g_list_append(find_history_list, this_entry);
+		if(last_find_string == NULL)
+			last_find_string = g_strdup(this_entry);
+		xmlFree(this_string);
+	}
+	return find_history_list;
+}
+
+static gboolean find_string_entered(GUIside *gui_side, gint response)
+{
+	if(response == GTK_RESPONSE_YES && find_compile(*gui_side->default_string))
+	{
+		ABox* abox = gui_side->abox;
+		GList* find_history_list;
+		GtkWidget* combo = gtk_widget_get_parent(ABOX(abox)->entry);
+		
+		findhistory_add(*gui_side->default_string);
+		find_history_list = find_load_history();
+		// FIXME free old history_list
+		gtk_combo_set_popdown_strings(GTK_COMBO(combo), find_history_list);
+		if(last_find_string)
+			gtk_entry_set_text(GTK_ENTRY(abox->entry), g_strdup(last_find_string));
+	}
+	return FALSE;
+}
+
 static void chmod_cb(gpointer data)
 {
 	GList *paths = (GList *) data;
@@ -1961,9 +2012,10 @@ void action_find(GList *paths)
 		return;
 	}
 
-	if (!last_find_string)
-		last_find_string = g_strdup("'core'");
+	GList *find_history_list = find_load_history();
 
+	if (!last_find_string)
+		last_find_string = g_strdup("'readme.txt'");
 	new_entry_string = last_find_string;
 
 	abox = abox_new(_("Find"), FALSE);
@@ -1978,14 +2030,15 @@ void action_find(GList *paths)
 	abox_add_results(ABOX(abox));
 
 	gui_side->default_string = &last_find_string;
-	abox_add_entry(ABOX(abox), last_find_string,
-				new_help_button(show_condition_help, NULL));
+	abox_add_combo(ABOX(abox), _("Expression:"), find_history_list, last_find_string,
+			new_help_button(show_condition_help, NULL));
 	g_signal_connect(ABOX(abox)->entry, "changed",
 			G_CALLBACK(entry_changed), gui_side);
 	set_find_string_colour(ABOX(abox)->entry, last_find_string);
 
-	gui_side->show_info = TRUE;
+	gui_side->show_info = FALSE;
 	gui_side->entry_string_func = set_find_string_colour;
+	gui_side->response_func = find_string_entered;
 
 	number_of_windows++;
 	gtk_widget_show(abox);
