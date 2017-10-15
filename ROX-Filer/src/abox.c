@@ -164,8 +164,11 @@ static void abox_init(GTypeInstance *object, gpointer gclass)
 
 	gtk_box_pack_start(GTK_BOX(abox->log_hbox), scrollbar, FALSE, TRUE, 0);
 
+	abox->btn_cancel = gtk_dialog_add_button(dialog,
+			GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL);
+	abox->btn_close = gtk_dialog_add_button(dialog,
+			GTK_STOCK_CLOSE, GTK_RESPONSE_CANCEL);
 	gtk_dialog_add_buttons(dialog,
-			GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL,
 			GTK_STOCK_NO, GTK_RESPONSE_NO,
 			GTK_STOCK_YES, GTK_RESPONSE_YES,
 			NULL);
@@ -222,6 +225,7 @@ static void abox_init(GTypeInstance *object, gpointer gclass)
 
 	gtk_widget_show_all(dialog->vbox);
 	gtk_widget_hide(abox->cmp_area);
+	gtk_widget_hide(abox->btn_close);
 
 	abox->quiet = abox_add_flag(abox,
 			_("Quiet"), _("Don't confirm every operation"),

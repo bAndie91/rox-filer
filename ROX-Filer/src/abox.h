@@ -27,6 +27,8 @@ struct _ABox
 	GtkWidget	*log_hbox;
 	GtkWidget	*results;	/* List of filenames found */
 	GtkWidget	*entry;		/* Plain entry, or part of combo */
+	GtkWidget	*btn_cancel;
+	GtkWidget	*btn_close;
 	FilerWindow	*preview;
 
 	GtkWidget       *cmp_area;      /* Area where files are compared */
