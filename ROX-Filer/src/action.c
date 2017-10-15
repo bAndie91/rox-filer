@@ -371,6 +371,8 @@ static void process_message(GUIside *gui_side, const gchar *buffer)
 		gui_side->errors++;
 		abox_log(abox, buffer + 1, "error");
 	}
+	else if (*buffer == 'E')
+		abox_log(abox, buffer + 1, "error");
 	else if (*buffer == '<') 
 		abox_set_file(abox, 0, buffer+1);
 	else if (*buffer == '>')
@@ -1458,14 +1460,19 @@ static void do_copy2(const char *path, const char *dest)
 	else
 	{
 		guchar	*error;
+		int exitstatus;
 
-		error = copy_file(path, dest_path);
+		error = copy_file_with_status(path, dest_path, &exitstatus);
 
 		if (error)
 		{
-			printf_send(_("!%s\nFailed to copy '%s'\n"),
-							error, path);
+			printf_send("E%s\n", error);
 			g_free(error);
+		}
+		
+		if (WEXITSTATUS(exitstatus) || !WIFEXITED(exitstatus))
+		{
+			printf_send(_("!Failed to copy '%s'\n"), path);
 		}
 		else
 			send_check_path(dest_path);

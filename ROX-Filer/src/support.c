@@ -365,14 +365,19 @@ const gchar *format_double_size(double size)
  */
 char *fork_exec_wait(const char **argv)
 {
-	int	status;
+	int status;
+	return fork_exec_wait_with_status(argv, &status);
+}
+
+char *fork_exec_wait_with_status(const char **argv, int* p_status)
+{
 	gchar	*errors = NULL;
 	GError	*error = NULL;
 
 	if (!g_spawn_sync(NULL, (char **) argv, NULL,
 		     G_SPAWN_SEARCH_PATH | G_SPAWN_STDOUT_TO_DEV_NULL,
 		     NULL, NULL,
-		     NULL, &errors, &status, &error))
+		     NULL, &errors, p_status, &error))
 	{
 		char *msg;
 
@@ -384,12 +389,12 @@ char *fork_exec_wait(const char **argv)
 	if (errors && !*errors)
 		null_g_free(&errors);
 
-	if (!WIFEXITED(status))
+	if (!WIFEXITED(*p_status))
 	{
 		if (!errors)
 			errors = g_strdup("(Subprocess crashed?)");
 	}
-	else if (WEXITSTATUS(status))
+	else if (WEXITSTATUS(*p_status))
 	{
 		if (!errors)
 			errors = g_strdup(_("ERROR"));
@@ -593,12 +598,32 @@ char *pretty_time(const time_t *time)
  */
 guchar *copy_file(const guchar *from, const guchar *to)
 {
+	int status;
+	return copy_file_with_status(from, to, &status);
+}
+
+guchar *copy_file_with_status(const guchar *from, const guchar *to, int* p_status)
+{
 	const char *argv[] = {"cp", "-pRf", NULL, NULL, NULL};
 
 	argv[2] = from;
 	argv[3] = to;
 
-	return fork_exec_wait(argv);
+#define LD_PRELOAD_VAR "LD_PRELOAD"
+	char* old_LD_PRELOAD = getenv(LD_PRELOAD_VAR);
+	char* envstr = NULL;
+	asprintf(&envstr, "%s=%s:%s", LD_PRELOAD_VAR, "/usr/lib/yazzy-preload/nofail_setfacl.so", old_LD_PRELOAD ? old_LD_PRELOAD : "");
+	putenv(envstr);
+
+	char *result = fork_exec_wait_with_status(argv, p_status);
+
+	if(old_LD_PRELOAD)
+		setenv(LD_PRELOAD_VAR, old_LD_PRELOAD, 1);
+	else
+		unsetenv(LD_PRELOAD_VAR);
+	free(envstr);
+
+	return result;
 }
 
 /* 'word' has all special characters escaped so that it may be inserted
