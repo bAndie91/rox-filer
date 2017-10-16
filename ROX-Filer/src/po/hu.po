@@ -4352,6 +4352,9 @@ msgstr "Alapértelmezett beállítások"
 msgid "Don't confirm deletion of non-writeable items."
 msgstr "Nem kér megerősítést a nem írható elemek törléséhez."
 
+msgid "Don't confirm overwrite."
+msgstr "Nem kér megerősítést a felülíráshoz."
+
 #: tips:179
 msgid "Don't display so much information in the message area."
 msgstr "Kevesebb üzenetet ad műveletvégzés közben."

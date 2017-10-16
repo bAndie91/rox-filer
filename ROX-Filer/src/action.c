@@ -643,8 +643,8 @@ static void process_flag(char flag)
 		case 'B':
 			o_brief = !o_brief;
 			break;
-	        case 'W':
-		        o_newer = !o_newer;
+		case 'W':
+			o_newer = !o_newer;
 			break;
 		case 'E':
 			read_new_entry_text();
@@ -1350,7 +1350,7 @@ static void do_copy2(const char *path, const char *dest)
 		{
 			printf_send("<%s", path);
 			printf_send(">%s", dest_path);
-			if (!printf_reply(from_parent, merge,
+			if (!printf_reply(from_parent, merge || !o_force,
 					  _("?'%s' already exists - %s?"),
 					  dest_path,
 					  merge ? _("merge contents")
@@ -2147,7 +2147,7 @@ void action_delete(GList *paths)
 		return;
 
 	abox_add_flag(ABOX(abox),
-		_("Force"), _("Don't confirm deletion of non-writeable items"),
+		_("Force"), _("Don't confirm deletion of non-writeable items."),
 		'F', o_action_force.int_value);
 	abox_add_flag(ABOX(abox),
 		_("Brief"), _("Only log directories being deleted"),
@@ -2344,6 +2344,9 @@ void action_copy(GList *paths, const char *dest, const char *leaf, int quiet)
 		   _("Newer"),
 		   _("Only over-write if source is newer than destination."),
 		   'W', o_action_newer.int_value);
+	abox_add_flag(ABOX(abox),
+		_("Force"), _("Don't confirm overwrite."),
+		'F', o_action_force.int_value);
 	abox_add_flag(ABOX(abox),
 		_("Brief"), _("Only log directories as they are copied"),
 		'B', o_action_brief.int_value);
