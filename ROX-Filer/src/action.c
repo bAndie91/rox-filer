@@ -1350,11 +1350,13 @@ static void do_copy2(const char *path, const char *dest)
 		{
 			printf_send("<%s", path);
 			printf_send(">%s", dest_path);
-			if (!printf_reply(from_parent, merge || !o_force,
+			int res = printf_reply(from_parent, merge || !o_force,
 					  _("?'%s' already exists - %s?"),
 					  dest_path,
-					  merge ? _("merge contents")
-					  	: _("overwrite")))
+					  merge ? _("merge contents") : _("overwrite"));
+			printf_send("<");
+			printf_send(">");
+			if(!res)
 				return;
 		}
 
@@ -1378,8 +1380,10 @@ static void do_copy2(const char *path, const char *dest)
 	{
 		printf_send("<%s", path);
 		printf_send(">");
-		if (!printf_reply(from_parent, FALSE,
-				  _("?Copy %s as %s?"), path, dest_path))
+		int res = printf_reply(from_parent, FALSE,
+				  _("?Copy %s as %s?"), path, dest_path);
+		printf_send("<");
+		if(!res)
 			return;
 	}
 	else if (!o_brief || S_ISDIR(info.st_mode))
@@ -1518,9 +1522,12 @@ static void do_move2(const char *path, const char *dest)
 		{
 			printf_send("<%s", path);
 			printf_send(">%s", dest_path);
-			if (!printf_reply(from_parent, TRUE,
+			int res = printf_reply(from_parent, TRUE,
 				       _("?'%s' already exists - overwrite?"),
-				       dest_path))
+				       dest_path);
+			printf_send("<");
+			printf_send(">");
+			if(!res)
 				return;
 		}
 
@@ -1541,8 +1548,11 @@ static void do_move2(const char *path, const char *dest)
 	{
 		printf_send("<%s", path);
 		printf_send(">");
-		if (!printf_reply(from_parent, FALSE,
-				  _("?Move %s as %s?"), path, dest_path))
+		int res = printf_reply(from_parent, FALSE,
+				  _("?Move %s as %s?"), path, dest_path);
+		printf_send("<");
+		printf_send(">");
+		if(!res)
 			return;
 	}
 	else if (!o_brief)
@@ -1606,8 +1616,11 @@ static void do_link(const char *path, const char *dest_path)
 	else {
 		printf_send("<%s", path);
 		printf_send(">");
-		if (!printf_reply(from_parent, FALSE,
-				  _("?Link %s as %s?"), path, dest_path))
+		int res = printf_reply(from_parent, FALSE,
+				  _("?Link %s as %s?"), path, dest_path);
+		printf_send("<");
+		printf_send(">");
+		if(!res)
 			return;
 	}
 
