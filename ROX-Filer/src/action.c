@@ -1999,7 +1999,10 @@ static void list_cb(gpointer data)
 	{
 		if(n>1 && i>0)
 		{
-			per=100*i/n;
+			if(!paths->next)
+				per=100;
+			else
+				per=100*i/n;
 			printf_send("%%%d", per);
 		}
 		send_dir((char *) paths->data);
