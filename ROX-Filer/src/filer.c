@@ -618,7 +618,7 @@ static void may_offer_unmount(FilerWindow *filer_window, char *mount)
 		}
 	}
 
-	dialog = gtk_message_dialog_new(NULL, 0, GTK_MESSAGE_QUESTION,
+	dialog = gtk_message_dialog_new(NULL, GTK_DIALOG_MODAL, GTK_MESSAGE_QUESTION,
 			GTK_BUTTONS_NONE, 
 			_("Do you want to unmount this device?\n\n"
 			"Unmounting a device makes it safe to remove "

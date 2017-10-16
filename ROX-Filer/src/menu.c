@@ -1248,7 +1248,7 @@ static gboolean link_cb(GObject *savebox,
 		GtkWidget *box, *button;
 		gint ans;
 
-		box = gtk_message_dialog_new(NULL, 0, GTK_MESSAGE_QUESTION,
+		box = gtk_message_dialog_new(NULL, GTK_DIALOG_MODAL, GTK_MESSAGE_QUESTION,
 				GTK_BUTTONS_CANCEL,
 				_("Symlink from '%s' already exists. "
 				"Replace it with a link to '%s'?"),
