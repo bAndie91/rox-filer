@@ -1,0 +1,1 @@
+PYTHONPATH="/usr/lib/rox/ROX-Lib2/python" exec "/usr/lib/rox/Edit/AppRun" "$@"

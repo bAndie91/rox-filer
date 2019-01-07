@@ -1,0 +1,626 @@
+#!/usr/bin/env python
+
+import os
+import sys
+import signal
+import resource
+import gobject
+import glib
+import gtk
+import pango
+import threading
+import select
+import re
+import time
+import socket
+try: import vte
+except: vte = None
+import termios
+import fcntl
+import array
+import struct
+gtk.threads_init()
+if not hasattr(socket, 'SO_PEERCRED'): socket.SO_PEERCRED = 17
+IONBF = 0
+IOLBF = 1
+
+BASH_FUNC = {
+	'echo': '() {{ /bin/echo "$@"; }}',
+	
+	'rox_ui_control': """() {{
+	local ROX_UI_CONTROL_PARSE=FAIL
+	case "$1" in
+	prompt|title|caption|icon) ROX_UI_CONTROL_PARSE=PASS;;
+	yesclose|noclose|code|endcode|fail|exit) ROX_UI_CONTROL_PARSE=PASS;;
+	progress)
+		case "$2" in
+		text|hide) ROX_UI_CONTROL_PARSE=PASS;;
+		pulse)
+			case "$3" in
+			start|stop) ROX_UI_CONTROL_PARSE=PASS;;
+			*)	expr "$3" : '[0-9]\+\(\.[0-9]\+\)\?$' >/dev/null && ROX_UI_CONTROL_PARSE=PASS;;
+			esac;;
+		*)	expr "$2" : '\([0-9]\+%\|[0-9]\+/[0-9]\+\)$' >/dev/null && ROX_UI_CONTROL_PARSE=PASS;;
+		esac;;
+	endwait)
+		expr "$2" : '[0-9]\+$' >/dev/null && ROX_UI_CONTROL_PARSE=PASS;;
+	esac
+	if [ $ROX_UI_CONTROL_PARSE != PASS ]
+	then
+		echo "$FUNCNAME: Parameters:
+	[prompt | title | caption] <TEXT>
+	icon <FILEPATH>
+	progress [PERCENT% | FRACTION | pulse [start | stop | FLOAT]]
+	progress [text [TEXT] | hide]
+	endwait <MSEC>
+	[yesclose | noclose | code | endcode | fail | exit]" >&2
+		return 1
+	fi
+	/bin/echo "$@" >&{fileno_ctlout};
+	}}""",
+	
+	'rox_ui_reply': """() {{
+	read -u {fileno_ctlin} ROX_UI_REPLY
+	echo -n "$ROX_UI_REPLY"
+	}}""",
+	
+	'rox_ui_prompt': """() {{
+	rox_ui_control prompt "$*"
+	rox_ui_reply
+	}}""",
+}
+
+def proc_has_child(Pid):
+	has_child = False
+	for thispid in filter(lambda x: re.match('\d+$',x), os.listdir('/proc')):
+		try:
+			fh = open('/proc/%s/status' % thispid, 'r')
+			while True:
+				s = fh.readline()
+				if s == '':
+					break
+				try:
+					ppid, = re.findall('ppid:\s*(\d+)', s, re.I)
+					if int(ppid) == Pid:
+						has_child = True
+					break
+				except ValueError:
+					pass
+			fh.close()
+			if has_child:
+				return True
+		except IOError, e:
+			pass
+	return False
+
+def termio_echo(tty, on):
+	tcflags = termios.tcgetattr(tty)
+	if on:
+		tcflags[3] |= termios.ECHO
+	else:
+		tcflags[3] &= ~termios.ECHO
+	termios.tcsetattr(tty, termios.TCSADRAIN, tcflags)
+
+def vte_ansi_show_cursor(term, on=True):
+	#notworks# term.set_cursor_blinks(vte.CURSOR_BLINK_OFF)
+	term.feed('\x1B[?25%c' % ('h' if on else 'l'))
+
+def socket_connect(sock, path):
+	while True:
+		try: sock.connect(path)
+		except: time.sleep(0.1)
+		else: break
+
+def is_expected(expects, fact):
+	if expects is None: return None
+	return (hasattr(expects, '__iter__') and fact in expects) or expects == fact
+
+def socket_accept(sock, expect_pid=None, expect_uid=None, expect_gid=None):
+	while True:
+		conn = sock.accept()[0]
+		creds = conn.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize('3i'))
+		pid, uid, gid = struct.unpack('3i',creds)
+		if is_expected(expect_pid, pid) is not False and is_expected(expect_uid, uid) is not False and is_expected(expect_gid, gid) is not False:
+			return conn
+
+
+def main_win_show(wdg, evt):
+	Win.disconnect(start_event)
+	
+	cmdargs = sys.argv[1].split() + sys.argv[2:]
+	if cmdargs[0] == '-X':
+		Shared.xterm = True
+		cmdargs = ['xterm', '-into', str(Sck1.get_id()), '-hold', '-e'] + cmdargs[1:]
+		Scr1.hide()
+		Sck1.show()
+	elif cmdargs[0] == '-T':
+		if not vte:
+			write_error("Missing module: vte\nInstall python-vte\n")
+			Shared.success = False
+			show_button_close()
+			return
+		Shared.vte = Vte1
+		cmdargs = cmdargs[1:]
+		Scr1.hide()
+		Vte1.show()
+		Vte1.grab_focus()
+	threading.Thread(target=dispatch_child, args=(cmdargs, Shared)).start()
+
+def dispatch_child(cmdargs, shared):
+	stdin_read, stdin_write = os.pipe()
+	stdout_read, stdout_write = os.pipe()
+	stderr_read, stderr_write = os.pipe()
+	fileno_ctlin = 3
+	fileno_ctlout = 4
+	
+	if shared.control == Shared.CTL_TYPE_PIPE:
+		ctlin_read, ctlin_write = os.pipe()
+		ctlout_read, ctlout_write = os.pipe()
+	else:
+		ctl_sockname = '\0pid%s' % os.getpid()
+	
+	if not shared.vte:
+		pid = os.fork()
+	else:
+		pid = shared.vte.forkpty()
+	
+	if pid == 0:
+		if not shared.vte:
+			os.setsid()
+			os.dup2(stdin_read, sys.stdin.fileno())
+			os.dup2(stdout_write, sys.stdout.fileno())
+			os.dup2(stderr_write, sys.stderr.fileno())
+		else:
+			os.close(stdin_read)
+			os.close(stdout_write)
+			os.close(stderr_write)
+		if shared.control == Shared.CTL_TYPE_PIPE:
+			os.dup2(ctlin_read, fileno_ctlin)
+			os.dup2(ctlout_write, fileno_ctlout)
+		else:
+			ctl_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+			socket_connect(ctl_sock, ctl_sockname)
+			ctl_fh = ctl_sock.makefile('w+b', IONBF)
+			os.dup2(ctl_fh.fileno(), fileno_ctlin)
+			os.dup2(ctl_fh.fileno(), fileno_ctlout)
+		os.closerange(5, resource.getrlimit(resource.RLIMIT_NOFILE)[0])
+		for func_name, func_body in BASH_FUNC.iteritems():
+			os.environ['BASH_FUNC_%s()' % (func_name,)] = func_body.format(fileno_ctlout=fileno_ctlout, fileno_ctlin=fileno_ctlin)
+		try:
+			os.execvp(cmdargs[0], cmdargs)
+		except OSError, e:
+			sys.stderr.write(str(e)+'\n')
+			os._exit(127)
+	
+	forktime = time.time()
+	shared.pid = pid
+	control_channel_open = False
+	wait_on_success = 2000
+	close_on_end = not shared.xterm
+	fail_count = 0
+	
+	os.close(stdin_read)
+	os.close(stdin_write)
+	os.close(stdout_write)
+	os.close(stderr_write)
+	if shared.control == Shared.CTL_TYPE_PIPE:
+		os.close(ctlin_read)
+		os.close(ctlout_write)
+		ctlin_write = os.fdopen(ctlin_write, 'w')
+		ctlout_read = os.fdopen(ctlout_read, 'r', IONBF)
+	else:
+		ctl_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+		ctl_sock.bind(ctl_sockname)
+		ctl_sock.listen(1)
+		ctl_conn = socket_accept(ctl_sock, expect_uid=os.getuid())
+		ctl_fh = ctl_conn.makefile('w+b', IONBF)
+		ctlin_write = ctl_fh
+		ctlout_read = ctl_fh
+	
+	stdout_read = os.fdopen(stdout_read, 'r', IONBF)
+	stderr_read = os.fdopen(stderr_read, 'r', IONBF)
+	shared.ctlin_write = ctlin_write
+	fds = [ctlout_read, stdout_read, stderr_read]
+	
+	while len(fds) > 0:
+		ready = select.select(fds, [], [], 2.0)
+		if shared.xterm and time.time()-forktime>3 and not proc_has_child(pid) and len(ready[0]) == 0:
+			# xterm finished but stayed on screen (-hold flag)
+			# FIXME time-guessing
+			break
+		for fd in ready[0]:
+			line = fd.readline()
+			if line == '':
+				fd.close()
+				fds.remove(fd)
+			else:
+				gtk.threads_enter()
+				if fd == stdout_read:
+					write_text(line)
+				elif fd == stderr_read:
+					write_error(line)
+				elif fd == ctlout_read:
+					control_channel_open = True
+					prms = line.split()
+					try:
+						comm = prms[0]
+						prm = prms[1:]
+						try: prm0 = prm[0]
+						except IndexError: prm0 = ''
+						try: prms = line.strip('\r\n').split(' ', 1)[1]
+						except IndexError: prms = ''
+					except IndexError:
+						pass
+					else:
+						if comm == 'prompt':
+							prompt(prms)
+						elif comm == 'title':
+							Win.set_title(prms)
+						elif comm == 'caption':
+							Lab1.set_text(prms)
+						elif comm == 'icon':
+							try:
+								pixbuf = gtk.gdk.pixbuf_new_from_file(prm0)
+							except:
+								pass
+							else:
+								if pixbuf.get_width() != pixbuf.get_height():
+									pixbuf = pixbuf.scale_simple(max(pixbuf.get_width(), pixbuf.get_height()), max(pixbuf.get_width(), pixbuf.get_height()), gtk.gdk.INTERP_NEAREST)
+								Win.set_icon(pixbuf)
+						elif comm == 'progress':
+							if prm0 == 'hide':
+								shared.pulsation.stop()
+								Prg1.hide()
+							else:
+								Prg1.show()
+								scroll_down()
+								
+								if prm0 == 'text':
+									try:
+										text = line.strip('\r\n').split(' ', 2)[2]
+										Prg1.set_text(text)
+									except IndexError:
+										Prg1.set_text('')
+								elif prm0 == 'pulse':
+									for pprm in prm[1:]:
+										if pprm == 'start':
+											shared.pulsation.start()
+										elif pprm == 'stop':
+											shared.pulsation.stop()
+										else:
+											try:
+												Prg1.set_pulse_step(float(pprm))
+											except ValueError:
+												pass
+									Prg1.pulse()
+								else:
+									shared.pulsation.stop()
+									m_perc = re.findall('([\d\.]+)%', prm0)
+									m_step = re.findall('(\d+)/(\d+)', prm0)
+									if m_perc:
+										frac = float(m_perc[0])/100
+									elif m_step:
+										denominator = int(m_step[0][1])+0.0
+										if denominator == 0:
+											frac = 1
+										else:
+											frac = int(m_step[0][0])/denominator
+									try:
+										Prg1.set_fraction(frac)
+									except:
+										pass
+						elif comm == 'endwait':
+							try:
+								wait_on_success = int(prm0)
+							except ValueError:
+								pass
+						elif comm == 'noclose':
+							close_on_end = False
+						elif comm == 'yesclose':
+							close_on_end = True
+						elif comm == 'code':
+							shared.blocktag = 'code'
+						elif comm == 'endcode':
+							shared.blocktag = 'normal'
+						elif comm == 'fail':
+							fail_count += 1
+							if shared.xterm:
+								Lab2.set_text("%d errors occured." % fail_count)
+								Lab2.show()
+						elif comm == 'exit':
+							control_channel_open = False
+				gtk.threads_leave()
+	
+	gtk.threads_enter()
+	buttons_sensitive(False)
+	if shared.vte:
+		# wait vte.Terminal to read data from child
+		ttyfd = shared.vte.get_pty()
+		while True:
+			bufsz = array.array('i', [0])
+			try:
+				fcntl.ioctl(ttyfd, termios.FIONREAD, bufsz, True)
+			except TypeError:
+				break
+			if bufsz[0] > 0:
+				# run a single non-blocking Gtk event cycle to let vte work
+				gtk.main_iteration_do(block=False)
+			else:
+				break
+		if ttyfd >= 0:
+			termio_echo(ttyfd, False)
+		vte_ansi_show_cursor(shared.vte, False)
+	
+	if shared.xterm:
+		success = True
+	else:
+		try:
+			x, status = os.waitpid(pid, 0)
+		except OSError, exc:
+			# vte.Terminal reaps forked child on its own,
+			# so we get child's status from vte
+			if exc.errno == os.errno.ECHILD and shared.vte:
+				status = shared.vte.get_child_exit_status()
+			else:
+				raise exc
+		code = status >> 8
+		sig = status & 0x7F
+		coredumped = status & 0x80 >> 7
+		
+		write_text('\n\n')
+		success = (code == 0 and sig == 0)
+		if success:
+			write_tagged("Done", 'bold')
+		else:
+			write_tagged("Error", 'boldred')
+		msg = ''
+		if code != 0:
+			msg += ", exit code %d" % code
+		if sig != 0:
+			msg += ", exit signal %d" % sig
+		if coredumped:
+			msg += ", core dumped"
+		write_text(msg)
+		
+		if fail_count:
+			set_autoclose(False)
+			write_error("\n\n%d errors occured." % fail_count)
+	
+	shared.success = success
+	if not success: set_autoclose(False)
+	show_button_close()
+	gtk.threads_leave()
+	
+	if shared.autoclose:
+		gobject.timeout_add(wait_on_success, do_autoclose)
+
+
+def scrollbar_adjusted(vadj):
+	pos = vadj.get_value()
+	bottom = vadj.get_upper() - vadj.get_page_size()
+	Shared.autoscroll = (pos >= bottom)
+
+def scroll_down(*x):
+	if Shared.autoscroll:
+		vadj = Scr1.get_vadjustment()
+		vadj.set_value(vadj.get_upper() - vadj.get_page_size())
+
+def write_tagged(text, tagname):
+	if not Shared.vte:
+		enditr = Buf1.get_end_iter()
+		Buf1.insert_with_tags_by_name(enditr, text.decode('utf-8', 'replace'), tagname)
+	else:
+		Shared.vte.feed(tag2ansi(tagname) + text.replace('\n', '\r\n') + tag2ansi('normal'))
+
+def write_text(text):
+	write_tagged(text, Shared.blocktag or 'normal')
+
+def write_error(text):
+	write_tagged(text, 'red')
+
+def prompt(text):
+	if Shared.xterm or Shared.vte:
+		Lab_prompt.set_markup('<b>%s</b>' % glib.markup_escape_text(text))
+		Lab_prompt.show()
+	else:
+		write_tagged(text, 'bold')
+	if Shared.quiet:
+		answer_yes()
+	else:
+		buttons_sensitive(True)
+
+def add_key_binding(widget, keyname, callback):
+	accelgroup = gtk.AccelGroup()
+	key, modifier = gtk.accelerator_parse(keyname)
+	accelgroup.connect_group(key, modifier, gtk.ACCEL_VISIBLE, callback)
+	widget.add_accel_group(accelgroup)
+
+def buttons_sensitive(on):
+	Btn_no.set_sensitive(on)
+	Btn_yes.set_sensitive(on)
+	Btn_quiet.set_sensitive(on)
+	if not on:
+		Lab_prompt.hide()
+
+def show_button_close():
+	Btn_cancel.set_label(gtk.STOCK_CLOSE)
+	Btn_cancel.set_use_stock(True)
+	Shared.pulsation.stop()
+
+def set_autoclose(on):
+	Shared.autoclose = on
+	Btn_noclose.set_active(not on)
+
+def on_click_noclose(chkbox):
+	set_autoclose(not chkbox.get_active())
+
+def do_autoclose():
+	if Shared.autoclose:
+		cancel()
+
+def cancel(*btn):
+	success = Shared.success
+	if success is None or (Shared.xterm and not Shared.killed):
+		Shared.killed = True
+		set_autoclose(False)
+		os.killpg(os.getpgid(Shared.pid), signal.SIGINT)
+	if success is not None:
+		gtk.main_quit()
+	return True
+
+def answer(s):
+	Lab_prompt.hide()
+	buttons_sensitive(False)
+	if not Shared.vte:
+		write_text(s)
+	Shared.ctlin_write.write(s)
+	Shared.ctlin_write.flush()
+	if Shared.vte:
+		Vte1.grab_focus()
+
+def answer_no(*btn):
+	answer("n\n")
+
+def answer_yes(*btn):
+	answer("y\n")
+
+def answer_quiet(*btn):
+	Shared.quiet = True
+	answer_yes()
+
+def plug_added(sck):
+	Sck1.grab_focus()
+
+def plug_removed(sck):
+	Sck1.hide()
+	Scr1.show()
+	Buf1.set_text('(window destroyed)')
+	Txt1.set_sensitive(False)
+
+def tag2ansi(tagname):
+	s = Tags[tagname]['ansi']
+	if s is None: return ''
+	return '\x1B[%sm' % s
+
+
+
+class Pulsation():
+	def __init__(self, prgbar):
+		self.prgbar = prgbar
+		self.thread = None
+	def start(self):
+		if self.thread is None or not self.thread.isAlive():
+			self._run = True
+			self.thread = threading.Thread(target=self._pulsate, args=())
+			self.thread.start()
+	def stop(self):
+		self._run = False
+	def _pulsate(self):
+		while self._run:
+			gtk.threads_enter()
+			self.prgbar.pulse()
+			gtk.threads_leave()
+			time.sleep(0.5)
+
+class Simple():
+	CTL_TYPE_PIPE, CTL_TYPE_SOCKET = range(2)
+	pid = None
+	quiet = False
+	success = None
+	autoscroll = True
+	blocktag = None
+	xterm = False
+	control = CTL_TYPE_PIPE
+	killed = None
+	vte = None
+	pulsation = None
+	autoclose = True
+Shared = Simple()
+
+Tags = {
+	"normal": {'ansi': '0', 'pango': {}},
+	"bold": {'ansi': '1', 'pango': {'weight': pango.WEIGHT_BOLD}},
+	"red": {'ansi': '31', 'pango': {'foreground': 'red'}},
+	"boldred": {'ansi': '31;1', 'pango': {'weight': pango.WEIGHT_BOLD, 'foreground': 'red'}},
+	"code": {'ansi': None, 'pango': {'family': 'Monospace'}},
+}
+
+
+Win = gtk.Window()
+Win.set_title("Rox progress")
+Win.set_default_size(450, 250)
+Win.set_icon_from_file('/usr/share/pixmaps/rox-filer.png')
+start_event = Win.connect('map-event', main_win_show)
+Win.connect('delete-event', cancel)
+add_key_binding(Win, 'Escape', cancel)
+
+Box0 = gtk.VBox()
+Lab1 = gtk.Label()
+Scr1 = gtk.ScrolledWindow()
+Txt1 = gtk.TextView()
+Buf1 = Txt1.get_buffer()
+for tagname in Tags.keys():
+	Buf1.create_tag(tagname, **Tags[tagname]['pango'])
+Sck1 = gtk.Socket()
+if vte: Vte1 = vte.Terminal()
+else: Vte1 = gtk.Label('dummy')
+Prg1 = gtk.ProgressBar()
+Lab2 = gtk.Label()
+Lab_prompt = gtk.Label()
+Box1 = gtk.HButtonBox()
+Btn_noclose = gtk.CheckButton("No Close")
+Btn_cancel = gtk.Button(stock=gtk.STOCK_CANCEL)
+Btn_no = gtk.Button(stock=gtk.STOCK_NO)
+Btn_yes = gtk.Button(stock=gtk.STOCK_YES)
+Btn_quiet = gtk.Button(stock=gtk.STOCK_GOTO_LAST)
+
+Box0.set_spacing(10)
+Scr1.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_ALWAYS)
+Scr1.set_shadow_type(gtk.SHADOW_IN)
+Txt1.set_editable(False)
+Sck1.set_can_focus(True)
+if vte:
+ Vte1.set_size_request(0, 0)
+ Vte1.set_cursor_blinks(vte.CURSOR_BLINK_ON)
+ Vte1.set_scroll_on_output(False)
+ Vte1.set_scroll_on_keystroke(True)
+Box1.set_layout(gtk.BUTTONBOX_END)
+Box1.set_spacing(10)
+buttons_sensitive(False)
+
+Scr1.get_vadjustment().connect('value-changed', scrollbar_adjusted)
+Txt1.connect('size-allocate', scroll_down)
+Sck1.connect('plug-added', plug_added)
+Sck1.connect('plug-removed', plug_removed)
+Btn_noclose.connect_after('clicked', on_click_noclose)
+Btn_cancel.connect('clicked', cancel)
+Btn_no.connect('clicked', answer_no)
+Btn_yes.connect('clicked', answer_yes)
+Btn_quiet.connect('clicked', answer_quiet)
+
+Win.add(Box0)
+Box0.pack_start(Lab1, False, False)
+Box0.pack_start(Scr1, True, True)
+Scr1.add(Txt1)
+Box0.pack_start(Sck1, True, True)
+if vte: Box0.pack_start(Vte1, True, True)
+Box0.pack_start(Prg1, False, False)
+Box0.pack_start(Lab2, False, False)
+Box0.pack_start(Lab_prompt, False, False)
+Box0.pack_start(Box1, False, False)
+Box1.pack_start(Btn_noclose, False, False)
+Box1.pack_start(Btn_cancel, False, False)
+Box1.pack_start(Btn_no, False, False)
+Box1.pack_start(Btn_yes, False, False)
+Box1.pack_start(Btn_quiet, False, False)
+
+
+Shared.pulsation = Pulsation(Prg1)
+Win.show_all()
+Prg1.hide()
+Sck1.hide()
+Vte1.hide()
+Lab2.hide()
+Lab_prompt.hide()
+gtk.main()
+
