@@ -25,14 +25,18 @@ IONBF = 0
 IOLBF = 1
 
 BASH_FUNC = {
+	# Using external echo command instead of shell built-in one to make stdout flush()'ed on each echo.
 	'echo': '() {{ /bin/echo "$@"; }}',
 	
+	# Make rox_ui_* commands available in bash via the function export feature.
 	'rox_ui_control': """() {{
 	local ROX_UI_CONTROL_PARSE=FAIL
+	declare -a prms=("$@")
 	case "$1" in
 	prompt|title|caption|icon) ROX_UI_CONTROL_PARSE=PASS;;
 	yesclose|noclose|code|endcode|fail|exit) ROX_UI_CONTROL_PARSE=PASS;;
-	progress)
+	progress|multiprogress)
+		[ "$1" = multiprogress ] && shift || true
 		case "$2" in
 		text|hide) ROX_UI_CONTROL_PARSE=PASS;;
 		pulse)
@@ -48,15 +52,15 @@ BASH_FUNC = {
 	if [ $ROX_UI_CONTROL_PARSE != PASS ]
 	then
 		echo "$FUNCNAME: Parameters:
-	[prompt | title | caption] <TEXT>
-	icon <FILEPATH>
-	progress [PERCENT% | FRACTION | pulse [start | stop | FLOAT]]
-	progress [text [TEXT] | hide]
-	endwait <MSEC>
-	[yesclose | noclose | code | endcode | fail | exit]" >&2
+  [prompt | title | caption] <TEXT>
+  icon <FILEPATH>
+  multiprogress <PROGRESS-ID> [PERCENT% | FRACTION | pulse [start | stop | FLOAT]]
+  multiprogress <PROGRESS-ID> [text [TEXT] | hide]
+  endwait <MSEC>
+  [yesclose | noclose | code | endcode | fail | exit]" >&2
 		return 1
 	fi
-	/bin/echo "$@" >&{fileno_ctlout};
+	/bin/echo "${{prms[@]}}" >&{fileno_ctlout};
 	}}""",
 	
 	'rox_ui_reply': """() {{
@@ -245,6 +249,9 @@ def dispatch_child(cmdargs, shared):
 					try:
 						comm = prms[0]
 						prm = prms[1:]
+						if comm == 'progress':
+							comm = 'multiprogress'
+							prm.insert(0, '0')
 						try: prm0 = prm[0]
 						except IndexError: prm0 = ''
 						try: prms = line.strip('\r\n').split(' ', 1)[1]
@@ -267,36 +274,41 @@ def dispatch_child(cmdargs, shared):
 								if pixbuf.get_width() != pixbuf.get_height():
 									pixbuf = pixbuf.scale_simple(max(pixbuf.get_width(), pixbuf.get_height()), max(pixbuf.get_width(), pixbuf.get_height()), gtk.gdk.INTERP_NEAREST)
 								Win.set_icon(pixbuf)
-						elif comm == 'progress':
-							if prm0 == 'hide':
-								shared.pulsation.stop()
-								Prg1.hide()
+						elif comm == 'multiprogress':
+							pbar_id = prm0
+							if not shared.progressbars.has_key(pbar_id):
+								shared.progressbars[pbar_id] = Progressbar(container=progressbar_container, pbar_id=pbar_id)
+							target_pbar = shared.progressbars[pbar_id]
+							
+							if prm[1] == 'hide':
+								target_pbar.pulsation.stop()
+								target_pbar.hide()
 							else:
-								Prg1.show()
+								target_pbar.show()
 								scroll_down()
 								
-								if prm0 == 'text':
+								if prm[1] == 'text':
 									try:
 										text = line.strip('\r\n').split(' ', 2)[2]
-										Prg1.set_text(text)
+										target_pbar.set_text(text)
 									except IndexError:
-										Prg1.set_text('')
-								elif prm0 == 'pulse':
-									for pprm in prm[1:]:
+										target_pbar.set_text('')
+								elif prm[1] == 'pulse':
+									for pprm in prm[2:]:
 										if pprm == 'start':
-											shared.pulsation.start()
+											target_pbar.pulsation.start()
 										elif pprm == 'stop':
-											shared.pulsation.stop()
+											target_pbar.pulsation.stop()
 										else:
 											try:
-												Prg1.set_pulse_step(float(pprm))
+												target_pbar.set_pulse_step(float(pprm))
 											except ValueError:
 												pass
-									Prg1.pulse()
+									target_pbar.pulse()
 								else:
-									shared.pulsation.stop()
-									m_perc = re.findall('([\d\.]+)%', prm0)
-									m_step = re.findall('(\d+)/(\d+)', prm0)
+									target_pbar.pulsation.stop()
+									m_perc = re.findall('([\d\.]+)%', prm[1])
+									m_step = re.findall('(\d+)/(\d+)', prm[1])
 									if m_perc:
 										frac = float(m_perc[0])/100
 									elif m_step:
@@ -306,7 +318,7 @@ def dispatch_child(cmdargs, shared):
 										else:
 											frac = int(m_step[0][0])/denominator
 									try:
-										Prg1.set_fraction(frac)
+										target_pbar.set_fraction(frac)
 									except:
 										pass
 						elif comm == 'endwait':
@@ -445,7 +457,8 @@ def buttons_sensitive(on):
 def show_button_close():
 	Btn_cancel.set_label(gtk.STOCK_CLOSE)
 	Btn_cancel.set_use_stock(True)
-	Shared.pulsation.stop()
+	for pbar in Shared.progressbars.itervalues():
+		pbar.pulsation.stop()
 
 def set_autoclose(on):
 	Shared.autoclose = on
@@ -533,9 +546,21 @@ class Simple():
 	control = CTL_TYPE_PIPE
 	killed = None
 	vte = None
-	pulsation = None
+	progressbars = {}
 	autoclose = True
+# a simple class object used to store various things
 Shared = Simple()
+
+class Progressbar(gtk.ProgressBar):
+	def __init__(self, **args):
+		container = args['container']
+		del args['container']
+		print "Progressbar ", args['pbar_id']
+		del args['pbar_id']
+		super(self.__class__, self).__init__(**args)
+		self.pulsation = Pulsation(self)
+		container.pack_start(self, False, False)
+		self.show()
 
 Tags = {
 	"normal": {'ansi': '0', 'pango': {}},
@@ -547,7 +572,7 @@ Tags = {
 
 
 Win = gtk.Window()
-Win.set_title("Rox progress")
+Win.set_title("Rox process")
 Win.set_default_size(450, 250)
 Win.set_icon_from_file('/usr/share/pixmaps/rox-filer.png')
 start_event = Win.connect('map-event', main_win_show)
@@ -564,7 +589,7 @@ for tagname in Tags.keys():
 Sck1 = gtk.Socket()
 if vte: Vte1 = vte.Terminal()
 else: Vte1 = gtk.Label('dummy')
-Prg1 = gtk.ProgressBar()
+progressbar_container = gtk.VBox()
 Lab2 = gtk.Label()
 Lab_prompt = gtk.Label()
 Box1 = gtk.HButtonBox()
@@ -604,7 +629,7 @@ Box0.pack_start(Scr1, True, True)
 Scr1.add(Txt1)
 Box0.pack_start(Sck1, True, True)
 if vte: Box0.pack_start(Vte1, True, True)
-Box0.pack_start(Prg1, False, False)
+Box0.pack_start(progressbar_container, False, False)
 Box0.pack_start(Lab2, False, False)
 Box0.pack_start(Lab_prompt, False, False)
 Box0.pack_start(Box1, False, False)
@@ -615,9 +640,7 @@ Box1.pack_start(Btn_yes, False, False)
 Box1.pack_start(Btn_quiet, False, False)
 
 
-Shared.pulsation = Pulsation(Prg1)
 Win.show_all()
-Prg1.hide()
 Sck1.hide()
 Vte1.hide()
 Lab2.hide()
