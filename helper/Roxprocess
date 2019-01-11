@@ -3,6 +3,7 @@
 import os
 import sys
 import signal
+import errno
 import resource
 import gobject
 import glib
@@ -33,7 +34,7 @@ BASH_FUNC = {
 	local ROX_UI_CONTROL_PARSE=FAIL
 	declare -a prms=("$@")
 	case "$1" in
-	prompt|title|caption|icon) ROX_UI_CONTROL_PARSE=PASS;;
+	prompt|title|caption|icon|clear) ROX_UI_CONTROL_PARSE=PASS;;
 	yesclose|noclose|code|endcode|fail|exit) ROX_UI_CONTROL_PARSE=PASS;;
 	progress|multiprogress)
 		[ "$1" = multiprogress ] && shift || true
@@ -69,7 +70,7 @@ BASH_FUNC = {
 	}}""",
 	
 	'rox_ui_prompt': """() {{
-	rox_ui_control prompt "$*"
+	rox_ui_control prompt "$* "
 	rox_ui_reply
 	}}""",
 }
@@ -150,6 +151,47 @@ def main_win_show(wdg, evt):
 		Vte1.grab_focus()
 	threading.Thread(target=dispatch_child, args=(cmdargs, Shared)).start()
 
+def get_blocking(fd):
+	fileno = fd.fileno()
+	return fcntl.fcntl(fileno, fcntl.F_GETFL) & os.O_NONBLOCK
+
+def set_blocking(do_blocking, fd):
+	fileno = fd.fileno()
+	fl = fcntl.fcntl(fileno, fcntl.F_GETFL) & os.O_NONBLOCK
+	if do_blocking:
+		fl = fl & ~os.O_NONBLOCK
+	else:
+		fl = fl | os.O_NONBLOCK
+	fcntl.fcntl(fileno, fcntl.F_SETFL, fl)
+
+def non_blocking_readline(fd, linebuffers):
+	do_blocking = get_blocking(fd)
+	set_blocking(False, fd)
+	fileno = fd.fileno
+	if not linebuffers.has_key(fileno):
+		linebuffers[fileno] = ''
+	c = None
+	while True:
+		try:
+			c = fd.read(1)
+			if c == '': break
+			linebuffers[fileno] += c
+			if c == '\n': break
+		except IOError, e:
+			if e.errno in (errno.EAGAIN, errno.EWOULDBLOCK):
+				break
+			else:
+				raise
+	set_blocking(do_blocking, fd)
+	if c is None:
+		return None
+	if c == '\n' or c == '':
+		line = linebuffers[fileno]
+		linebuffers[fileno] = ''
+		return line
+	else:
+		return None
+
 def dispatch_child(cmdargs, shared):
 	stdin_read, stdin_write = os.pipe()
 	stdout_read, stdout_write = os.pipe()
@@ -225,6 +267,7 @@ def dispatch_child(cmdargs, shared):
 	stderr_read = os.fdopen(stderr_read, 'r', IONBF)
 	shared.ctlin_write = ctlin_write
 	fds = [ctlout_read, stdout_read, stderr_read]
+	linebuffers = {}
 	
 	while len(fds) > 0:
 		ready = select.select(fds, [], [], 2.0)
@@ -233,8 +276,13 @@ def dispatch_child(cmdargs, shared):
 			# FIXME time-guessing
 			break
 		for fd in ready[0]:
-			line = fd.readline()
+			line = non_blocking_readline(fd, linebuffers)
+			if line is None:
+				# got partial line in the pipe
+				# come back when it is completed
+				continue
 			if line == '':
+				# got EOF
 				fd.close()
 				fds.remove(fd)
 			else:
@@ -274,6 +322,14 @@ def dispatch_child(cmdargs, shared):
 								if pixbuf.get_width() != pixbuf.get_height():
 									pixbuf = pixbuf.scale_simple(max(pixbuf.get_width(), pixbuf.get_height()), max(pixbuf.get_width(), pixbuf.get_height()), gtk.gdk.INTERP_NEAREST)
 								Win.set_icon(pixbuf)
+						elif comm == 'clear':
+							if shared.vte:
+								shared.vte.reset(False, True)
+							elif shared.xterm:
+								# TODO
+								pass
+							else:
+								Buf1.set_text('')
 						elif comm == 'multiprogress':
 							pbar_id = prm0
 							if not shared.progressbars.has_key(pbar_id):
@@ -555,10 +611,11 @@ class Progressbar(gtk.ProgressBar):
 	def __init__(self, **args):
 		container = args['container']
 		del args['container']
-		print "Progressbar ", args['pbar_id']
+		pbar_id = args['pbar_id']
 		del args['pbar_id']
 		super(self.__class__, self).__init__(**args)
 		self.pulsation = Pulsation(self)
+		self.pbar_id = pbar_id
 		container.pack_start(self, False, False)
 		self.show()
 

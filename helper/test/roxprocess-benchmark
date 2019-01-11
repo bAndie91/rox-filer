@@ -2,7 +2,18 @@
 
 # should add all of the Roxprocess features here
 
-# multiprogress
+
+rox_ui_control title Roxprocess benchmark and feature test
+
+
+rox_ui_control caption test feature: clear
+echo this message and the whole Roxprocess screen will be cleared
+rox_ui_prompt press Yes >/dev/null
+rox_ui_control clear
+[ `rox_ui_prompt is the screen cleared now\?` = y ] || exit 1
+
+
+rox_ui_control caption test feature: multiprogress
 echo you should see a loading and an unloading progressbar
 rox_ui_control progress 0/10
 rox_ui_control multiprogress asdasd 5/10
@@ -23,3 +34,7 @@ rox_ui_control progress 10/10
 rox_ui_control multiprogress asdasd 0/10
 sleep 0.5
 [ `rox_ui_prompt did you see the correct progressbars?` = y ] || exit 1
+
+
+rox_ui_control caption tests PASSED
+echo PASSED
