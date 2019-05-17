@@ -26,9 +26,6 @@ IONBF = 0
 IOLBF = 1
 
 BASH_FUNC = {
-	# Using external echo command instead of shell built-in one to make stdout flush()'ed on each echo.
-	'echo': '() {{ /bin/echo "$@"; }}',
-	
 	# Make rox_ui_* commands available in bash via the function export feature.
 	'rox_ui_control': """() {{
 	local ROX_UI_CONTROL_PARSE=FAIL
@@ -61,7 +58,7 @@ BASH_FUNC = {
   [yesclose | noclose | code | endcode | fail | exit]" >&2
 		return 1
 	fi
-	/bin/echo "${{prms[@]}}" >&{fileno_ctlout};
+	echo "${{prms[@]}}" >&{fileno_ctlout};
 	}}""",
 	
 	'rox_ui_reply': """() {{
