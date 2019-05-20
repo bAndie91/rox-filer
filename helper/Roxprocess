@@ -161,6 +161,14 @@ def set_blocking(do_blocking, fd):
 		fl = fl | os.O_NONBLOCK
 	fcntl.fcntl(fileno, fcntl.F_SETFL, fl)
 
+def flush_readline(fd, linebuffers):
+	fileno = fd.fileno
+	data = ''
+	if linebuffers.has_key(fileno):
+		data = linebuffers[fileno]
+	linebuffers[fileno] = ''
+	return data
+
 def non_blocking_readline(fd, linebuffers):
 	do_blocking = get_blocking(fd)
 	set_blocking(False, fd)
@@ -305,6 +313,8 @@ def dispatch_child(cmdargs, shared):
 						pass
 					else:
 						if comm == 'prompt':
+							write_text(flush_readline(stdout_read, linebuffers))
+							write_error(flush_readline(stderr_read, linebuffers))
 							prompt(prms)
 						elif comm == 'title':
 							Win.set_title(prms)
