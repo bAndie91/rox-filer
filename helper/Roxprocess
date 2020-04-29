@@ -304,6 +304,10 @@ def dispatch_child(cmdargs, shared):
 			else:
 				shared.chainbuffer.append((streamname, data))
 	epoll.close()
+	shared.chainbuffer.append(('end', ''))
+	
+	# wait execute_commands thread to finish
+	while len(shared.chainbuffer) > 0: time.sleep(0.1)
 	
 	gtk.threads_enter()
 	buttons_sensitive(False)
@@ -370,10 +374,19 @@ def dispatch_child(cmdargs, shared):
 
 def execute_commands(shared):
 	carrybuffer = {'stdout':'', 'stderr':'', 'control':''}
-	while shared.success is None:
-		while len(shared.chainbuffer) > 0:
-			streamname, data = shared.chainbuffer[0]
-			del shared.chainbuffer[0]
+	do_loop = True
+	while do_loop:
+		while len(shared.chainbuffer) > 0 or carrybuffer['control']:
+			if len(shared.chainbuffer) > 0:
+				streamname, data = shared.chainbuffer[0]
+				del shared.chainbuffer[0]
+				if streamname == 'end':
+					do_loop = False
+					continue
+			else:
+				# there is data in carrybuffer['control']
+				streamname = 'control'
+				data = ''
 			data = carrybuffer[streamname] + data
 			carrybuffer[streamname] = ''
 			
