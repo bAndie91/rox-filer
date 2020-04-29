@@ -319,6 +319,10 @@ def dispatch_child(cmdargs, shared):
 						elif comm == 'title':
 							Win.set_title(prms)
 						elif comm == 'caption':
+							if prms == '':
+								Lab1.hide()
+							else:
+								Lab1.show_all()
 							Lab1.set_text(prms)
 						elif comm == 'icon':
 							try:
@@ -390,9 +394,9 @@ def dispatch_child(cmdargs, shared):
 							except ValueError:
 								pass
 						elif comm == 'noclose':
-							close_on_end = False
+							set_autoclose(False)
 						elif comm == 'yesclose':
-							close_on_end = True
+							set_autoclose(True)
 						elif comm == 'code':
 							shared.blocktag = 'code'
 						elif comm == 'endcode':
@@ -705,6 +709,7 @@ Box1.pack_start(Btn_quiet, False, False)
 
 
 Win.show_all()
+Lab1.hide()
 Sck1.hide()
 Vte1.hide()
 Lab2.hide()
