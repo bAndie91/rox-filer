@@ -32,7 +32,7 @@ BASH_FUNC = {
 	declare -a prms=("$@")
 	case "$1" in
 	prompt|title|caption|icon|clear) ROX_UI_CONTROL_PARSE=PASS;;
-	yesclose|noclose|code|endcode|fail|exit) ROX_UI_CONTROL_PARSE=PASS;;
+	yesclose|noclose|code|endcode|fail) ROX_UI_CONTROL_PARSE=PASS;;
 	progress|multiprogress)
 		[ "$1" = multiprogress ] && shift || true
 		case "$2" in
@@ -55,10 +55,12 @@ BASH_FUNC = {
   multiprogress <PROGRESS-ID> [PERCENT% | FRACTION | pulse [start | stop | FLOAT]]
   multiprogress <PROGRESS-ID> [text [TEXT] | hide]
   endwait <MSEC>
-  [yesclose | noclose | code | endcode | fail | exit]" >&2
+  [yesclose | noclose | code | endcode | fail]" >&2
 		return 1
 	fi
 	echo "${{prms[@]}}" >&{fileno_ctlout};
+	local oksignal
+	read -u {fileno_ctlin} oksignal
 	}}""",
 	
 	'rox_ui_reply': """() {{
@@ -147,6 +149,7 @@ def main_win_show(wdg, evt):
 		Vte1.show()
 		Vte1.grab_focus()
 	threading.Thread(target=dispatch_child, args=(cmdargs, Shared)).start()
+	threading.Thread(target=execute_commands, args=(Shared,)).start()
 
 def get_blocking(fd):
 	fileno = fd.fileno()
@@ -245,7 +248,6 @@ def dispatch_child(cmdargs, shared):
 	
 	forktime = time.time()
 	shared.pid = pid
-	control_channel_open = False
 	wait_on_success = 2000
 	close_on_end = not shared.xterm
 	fail_count = 0
@@ -271,33 +273,129 @@ def dispatch_child(cmdargs, shared):
 	stdout_read = os.fdopen(stdout_read, 'r', IONBF)
 	stderr_read = os.fdopen(stderr_read, 'r', IONBF)
 	shared.ctlin_write = ctlin_write
-	fds = [ctlout_read, stdout_read, stderr_read]
-	linebuffers = {}
+	fds = {
+		stdout_read.fileno(): stdout_read,
+		stderr_read.fileno(): stderr_read,
+		ctlout_read.fileno(): ctlout_read,
+	}
+	epoll = select.epoll()
+	for fnum, fhandle in fds.iteritems():
+		set_blocking(False, fhandle)
+		epoll.register(fhandle, select.EPOLLIN)
 	
 	while len(fds) > 0:
-		ready = select.select(fds, [], [], 2.0)
-		if shared.xterm and time.time()-forktime>3 and not proc_has_child(pid) and len(ready[0]) == 0:
-			# xterm finished but stayed on screen (-hold flag)
-			# FIXME time-guessing
-			break
-		for fd in ready[0]:
-			line = non_blocking_readline(fd, linebuffers)
-			if line is None:
-				# got partial line in the pipe
-				# come back when it is completed
-				continue
-			if line == '':
+		events = epoll.poll(2.0)
+		if len(events) == 0:
+			if shared.xterm and time.time()-forktime>3 and not proc_has_child(pid):
+				# xterm finished but stayed on screen (-hold flag)
+				# FIXME: time-guessing
+				break
+		for fnum, _eventmask in events:
+			streamname = None
+			fhandle = fds[fnum]
+			if fhandle == stdout_read: streamname = 'stdout'
+			elif fhandle == stderr_read: streamname = 'stderr'
+			elif fhandle == ctlout_read: streamname = 'control'
+			data = fhandle.read(65536)
+			if data == '':
 				# got EOF
-				fd.close()
-				fds.remove(fd)
+				fhandle.close()
+				del fds[fnum]
 			else:
-				gtk.threads_enter()
-				if fd == stdout_read:
-					write_text(line)
-				elif fd == stderr_read:
-					write_error(line)
-				elif fd == ctlout_read:
-					control_channel_open = True
+				shared.chainbuffer.append((streamname, data))
+	epoll.close()
+	
+	gtk.threads_enter()
+	buttons_sensitive(False)
+	if shared.vte:
+		# wait vte.Terminal to read data from child
+		ttyfd = shared.vte.get_pty()
+		while True:
+			bufsz = array.array('i', [0])
+			try:
+				fcntl.ioctl(ttyfd, termios.FIONREAD, bufsz, True)
+			except TypeError:
+				break
+			if bufsz[0] > 0:
+				# run a single non-blocking Gtk event cycle to let vte work
+				gtk.main_iteration_do(block=False)
+			else:
+				break
+		if ttyfd >= 0:
+			termio_echo(ttyfd, False)
+		vte_ansi_show_cursor(shared.vte, False)
+	
+	if shared.xterm:
+		success = True
+	else:
+		try:
+			x, status = os.waitpid(pid, 0)
+		except OSError, exc:
+			# vte.Terminal reaps forked child on its own,
+			# so we get child's status from vte
+			if exc.errno == os.errno.ECHILD and shared.vte:
+				status = shared.vte.get_child_exit_status()
+			else:
+				raise exc
+		code = status >> 8
+		sig = status & 0x7F
+		coredumped = status & 0x80 >> 7
+		
+		write_text('\n\n')
+		success = (code == 0 and sig == 0)
+		if success:
+			write_tagged("Done", 'bold')
+		else:
+			write_tagged("Error", 'boldred')
+		msg = ''
+		if code != 0:
+			msg += ", exit code %d" % code
+		if sig != 0:
+			msg += ", exit signal %d" % sig
+		if coredumped:
+			msg += ", core dumped"
+		write_text(msg)
+		
+		if fail_count:
+			set_autoclose(False)
+			write_error("\n\n%d errors occured." % fail_count)
+	
+	shared.success = success
+	if not success: set_autoclose(False)
+	show_button_close()
+	gtk.threads_leave()
+	
+	if shared.autoclose:
+		gobject.timeout_add(wait_on_success, do_autoclose)
+
+def execute_commands(shared):
+	carrybuffer = {'stdout':'', 'stderr':'', 'control':''}
+	while shared.success is None:
+		while len(shared.chainbuffer) > 0:
+			streamname, data = shared.chainbuffer[0]
+			del shared.chainbuffer[0]
+			data = carrybuffer[streamname] + data
+			carrybuffer[streamname] = ''
+			
+			gtk.threads_enter()
+			if streamname == 'stdout':
+				write_text(data)
+			elif streamname == 'stderr':
+				write_error(data)
+			elif streamname == 'control':
+				while True:
+					linefeedpos = data.find('\n')
+					if linefeedpos == -1:
+						carrybuffer[streamname] = data
+						break
+					
+					line = data[0:linefeedpos]
+					data = data[linefeedpos+1:]
+					
+					# Signal to the application that we've got the control command
+					Shared.ctlin_write.write('ok\n')
+					Shared.ctlin_write.flush()
+					
 					prms = line.split()
 					try:
 						comm = prms[0]
@@ -313,8 +411,6 @@ def dispatch_child(cmdargs, shared):
 						pass
 					else:
 						if comm == 'prompt':
-							write_text(flush_readline(stdout_read, linebuffers))
-							write_error(flush_readline(stderr_read, linebuffers))
 							prompt(prms)
 						elif comm == 'title':
 							Win.set_title(prms)
@@ -406,72 +502,7 @@ def dispatch_child(cmdargs, shared):
 							if shared.xterm:
 								Lab2.set_text("%d errors occured." % fail_count)
 								Lab2.show()
-						elif comm == 'exit':
-							control_channel_open = False
-				gtk.threads_leave()
-	
-	gtk.threads_enter()
-	buttons_sensitive(False)
-	if shared.vte:
-		# wait vte.Terminal to read data from child
-		ttyfd = shared.vte.get_pty()
-		while True:
-			bufsz = array.array('i', [0])
-			try:
-				fcntl.ioctl(ttyfd, termios.FIONREAD, bufsz, True)
-			except TypeError:
-				break
-			if bufsz[0] > 0:
-				# run a single non-blocking Gtk event cycle to let vte work
-				gtk.main_iteration_do(block=False)
-			else:
-				break
-		if ttyfd >= 0:
-			termio_echo(ttyfd, False)
-		vte_ansi_show_cursor(shared.vte, False)
-	
-	if shared.xterm:
-		success = True
-	else:
-		try:
-			x, status = os.waitpid(pid, 0)
-		except OSError, exc:
-			# vte.Terminal reaps forked child on its own,
-			# so we get child's status from vte
-			if exc.errno == os.errno.ECHILD and shared.vte:
-				status = shared.vte.get_child_exit_status()
-			else:
-				raise exc
-		code = status >> 8
-		sig = status & 0x7F
-		coredumped = status & 0x80 >> 7
-		
-		write_text('\n\n')
-		success = (code == 0 and sig == 0)
-		if success:
-			write_tagged("Done", 'bold')
-		else:
-			write_tagged("Error", 'boldred')
-		msg = ''
-		if code != 0:
-			msg += ", exit code %d" % code
-		if sig != 0:
-			msg += ", exit signal %d" % sig
-		if coredumped:
-			msg += ", core dumped"
-		write_text(msg)
-		
-		if fail_count:
-			set_autoclose(False)
-			write_error("\n\n%d errors occured." % fail_count)
-	
-	shared.success = success
-	if not success: set_autoclose(False)
-	show_button_close()
-	gtk.threads_leave()
-	
-	if shared.autoclose:
-		gobject.timeout_add(wait_on_success, do_autoclose)
+			gtk.threads_leave()
 
 
 def scrollbar_adjusted(vadj):
@@ -615,6 +646,7 @@ class Simple():
 	vte = None
 	progressbars = {}
 	autoclose = True
+	chainbuffer = []
 # a simple class object used to store various things
 Shared = Simple()
 
