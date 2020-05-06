@@ -292,6 +292,13 @@ def dispatch_child(cmdargs, shared):
 				break
 		for fnum, _eventmask in events:
 			streamname = None
+			if not fds.has_key(fnum):
+				# sometimes epoll drop fnum even after we have got zero read() 
+				# from that fhandle, which indicated EOF and we also closed the fhandle,
+				# thus epoll auto deregistered it. empty read() result could not be 
+				# due to the non-blockingness, because epoll dropped it, so some data is
+				# ready on the filehandle. so ignore this event.
+				continue
 			fhandle = fds[fnum]
 			if fhandle == stdout_read: streamname = 'stdout'
 			elif fhandle == stderr_read: streamname = 'stderr'
@@ -700,8 +707,11 @@ Buf1 = Txt1.get_buffer()
 for tagname in Tags.keys():
 	Buf1.create_tag(tagname, **Tags[tagname]['pango'])
 Sck1 = gtk.Socket()
-if vte: Vte1 = vte.Terminal()
-else: Vte1 = gtk.Label('dummy')
+if vte:
+	Vte1 = vte.Terminal()
+	Vte1.set_scrollback_lines(5000)
+else:
+	Vte1 = gtk.Label('dummy')
 progressbar_container = gtk.VBox()
 Lab2 = gtk.Label()
 Lab_prompt = gtk.Label()
