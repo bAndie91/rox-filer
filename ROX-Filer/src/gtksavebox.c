@@ -304,6 +304,7 @@ gtk_savebox_new (const gchar *action)
   GList	    *list, *next;
   
   dialog = GTK_DIALOG (gtk_widget_new (gtk_savebox_get_type(), NULL));
+  gtk_window_set_default_size(GTK_WINDOW(dialog), 512, 128);
 
   gtk_dialog_add_button (dialog, GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL);
 
