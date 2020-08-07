@@ -185,6 +185,8 @@ void toolbar_init(void)
 void toolbar_update_info(FilerWindow *filer_window)
 {
 	gchar		*label;
+	gchar		*label1 = NULL;
+	gchar		*label2 = NULL;
 	ViewIface	*view;
 	int		n_selected;
 
@@ -200,45 +202,7 @@ void toolbar_update_info(FilerWindow *filer_window)
 
 	n_selected = view_count_selected(view);
 
-	if (n_selected == 0)
-	{
-		gchar *s = NULL;
-		int   n_items;
-
-		if (filer_window->scanning)
-		{
-			gtk_label_set_text(
-				GTK_LABEL(filer_window->toolbar_text), "");
-			return;
-		}
-
-		if (!(filer_window->show_hidden ||
-		      filer_window->temp_show_hidden) ||
-		    filer_window->filter!=FILER_SHOW_ALL)
-		{
-			GHashTable *hash = filer_window->directory->known_items;
-			int	   tally = 0;
-
-			filer_window_being_counted=filer_window;
-			g_hash_table_foreach(hash, tally_items, &tally);
-
-			if (tally)
-				s = g_strdup_printf(_(" (%u hidden)"), tally);
-		}
-
-		n_items = view_count_items(view);
-
-		if (n_items)
-			label = g_strdup_printf("%d %s%s",
-					n_items,
-					n_items != 1 ? _("items") : _("item"),
-					s ? s : "");
-		else /* (French plurals work differently for zero) */
-			label = g_strdup_printf(_("No items%s"),
-					s ? s : "");
-		g_free(s);
-	}
-	else
+	if (n_selected > 0)
 	{
 		double	size = 0;
 		ViewIter iter;
@@ -253,10 +217,59 @@ void toolbar_update_info(FilerWindow *filer_window)
 				size += (double) item->size;
 		}
 
-		label = g_strdup_printf(_("%u selected (%s)"),
+		label1 = g_strdup_printf(_("%u selected (%s)"),
 				n_selected, format_double_size(size));
 	}
+	{
+		gchar *s = NULL;
+		int   n_items;
 
+		if (filer_window->scanning)
+		{
+			if(n_selected == 0)
+			{
+				gtk_label_set_text(
+					GTK_LABEL(filer_window->toolbar_text), "");
+				return;
+			}
+		}
+		else
+		{
+			if (!(filer_window->show_hidden ||
+			      filer_window->temp_show_hidden) ||
+			    filer_window->filter!=FILER_SHOW_ALL)
+			{
+				GHashTable *hash = filer_window->directory->known_items;
+				int	   tally = 0;
+	
+				filer_window_being_counted=filer_window;
+				g_hash_table_foreach(hash, tally_items, &tally);
+	
+				if (tally)
+					s = g_strdup_printf(_(" (%u hidden)"), tally);
+			}
+	
+			n_items = view_count_items(view);
+	
+			if (n_items)
+				label2 = g_strdup_printf("%d %s%s",
+						n_items,
+						n_items != 1 ? _("items") : _("item"),
+						s ? s : "");
+			else /* (French plurals work differently for zero) */
+				label2 = g_strdup_printf(_("No items%s"),
+						s ? s : "");
+			g_free(s);
+		}
+	}
+
+	label = g_strconcat(
+		label1 != NULL ? label1 : "",
+		label1 != NULL ? _(" total ") : "",
+		label2 != NULL ? label2 : "",
+		NULL);
+	if(label1 != NULL) g_free(label1);
+	if(label2 != NULL) g_free(label2);
 	gtk_label_set_text(GTK_LABEL(filer_window->toolbar_text), label);
 	g_free(label);
 }
