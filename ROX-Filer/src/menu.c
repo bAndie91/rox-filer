@@ -1367,7 +1367,7 @@ static gboolean new_directory_cb(GObject *savebox,
 		if(strncmp(window_with_focus->sym_path, path, len)==0 && strlen(path)>len && path[len]=='/')
 		{
 			guchar	*leaf;
-			leaf = g_strndup(path+len+1, strchr(path+len+1, '/') - (path+len+1));
+			leaf = g_strndup(path+len+1, strchrnul(path+len+1, '/') - (path+len+1));
 			if (leaf) {
 				display_set_autoselect(window_with_focus, leaf);
 				g_free(leaf);
