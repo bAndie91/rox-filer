@@ -871,14 +871,7 @@ void menu_show_shift_action(GtkWidget *menu_item, DirItem *item, gboolean next)
 
 	if (item)
 	{
-		if (item->flags & ITEM_FLAG_MOUNT_POINT)
-		{
-			if (item->flags & ITEM_FLAG_MOUNTED)
-				shift_action = N_("Unmount");
-			else
-				shift_action = N_("Open unmounted");
-		}
-		else if (item->flags & ITEM_FLAG_SYMLINK)
+		if (item->flags & ITEM_FLAG_SYMLINK)
 			shift_action = N_("Show Target");
 		else if (item->base_type == TYPE_DIRECTORY)
 			shift_action = N_("Look Inside");
