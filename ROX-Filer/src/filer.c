@@ -1184,10 +1184,6 @@ void change_to_parent(FilerWindow *filer_window)
 	if (current[0] == '/' && current[1] == '\0')
 		return;		/* Already in the root */
 
-	if (mount_is_user_mounted(filer_window->real_path))
-		may_offer_unmount(filer_window,
-				g_strdup(filer_window->real_path));
-	
 	dir = g_path_get_dirname(current);
 	filer_change_to(filer_window, dir, g_basename(current));
 	g_free(dir);
