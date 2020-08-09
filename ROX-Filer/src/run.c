@@ -46,9 +46,6 @@ static gboolean follow_symlink(const char *full_path,
 			       FilerWindow *filer_window,
 			       FilerWindow *src_window);
 static gboolean open_file(const guchar *path, MIME_type *type);
-static void open_mountpoint(const guchar *full_path, DirItem *item,
-			    FilerWindow *filer_window, FilerWindow *src_window,
-			    gboolean edit);
 static gboolean run_desktop(const char *full_path,
 			    const char **args, const char *dir);
 static gboolean type_open(const char *path, MIME_type *type);
@@ -269,12 +266,7 @@ gboolean run_diritem(const guchar *full_path,
 				return TRUE;
 			}
 
-			if (item->flags & ITEM_FLAG_MOUNT_POINT)
-			{
-				open_mountpoint(full_path, item,
-						filer_window, src_window, edit);
-			}
-			else if (filer_window)
+			if (filer_window)
 				filer_change_to(filer_window, full_path, NULL);
 			else
 				filer_opendir(full_path, src_window, NULL);
@@ -588,32 +580,6 @@ static gboolean open_file(const guchar *path, MIME_type *type)
 	rox_spawn(home_dir, (const gchar **) argv);
 	
 	return FALSE;
-}
-
-/* Called like run_diritem, when a mount-point is opened */
-static void open_mountpoint(const guchar *full_path, DirItem *item,
-			    FilerWindow *filer_window, FilerWindow *src_window,
-			    gboolean edit)
-{
-	gboolean mounted = (item->flags & ITEM_FLAG_MOUNTED) != 0;
-
-	if (mounted == edit)
-	{
-		GList	*paths;
-
-		paths = g_list_prepend(NULL, (gpointer) full_path);
-		action_mount(paths, filer_window == NULL, !mounted, -1);
-		g_list_free(paths);
-		if (filer_window && !mounted)
-			filer_change_to(filer_window, full_path, NULL);
-	}
-	else
-	{
-		if (filer_window)
-			filer_change_to(filer_window, full_path, NULL);
-		else
-			filer_opendir(full_path, src_window, NULL);
-	}
 }
 
 /* full_path is a .desktop file. Execute the application, using the Exec line

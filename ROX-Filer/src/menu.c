@@ -145,7 +145,6 @@ static void clear_selection(gpointer data, guint action, GtkWidget *widget);
 static void invert_selection(gpointer data, guint action, GtkWidget *widget);
 static void new_directory(gpointer data, guint action, GtkWidget *widget);
 static void new_file(gpointer data, guint action, GtkWidget *widget);
-static void customise_new(gpointer data);
 static void xterm_here(gpointer data, guint action, GtkWidget *widget);
 
 static void open_parent_same(gpointer data, guint action, GtkWidget *widget);
@@ -216,8 +215,6 @@ static GtkItemFactoryEntry filer_menu_def[] = {
 {">" N_("Delete"),	    	"<Ctrl>X", file_op, FILE_DELETE, "<StockItem>", GTK_STOCK_DELETE},
 {">",				NULL, NULL, 0, "<Separator>"},
 {">" N_("Shift Open"),   	NULL, file_op, FILE_OPEN_FILE},
-{">" N_("Send To..."),		NULL, file_op, FILE_SEND_TO, NULL},
-{">",				NULL, NULL, 0, "<Separator>"},
 {">" N_("Set Run Action..."),	"asterisk", file_op, FILE_RUN_ACTION, "<StockItem>", GTK_STOCK_EXECUTE},
 {">" N_("Set Icon..."),		NULL, file_op, FILE_SET_ICON, NULL},
 {">" N_("Set Type..."),		NULL, file_op, FILE_SET_TYPE, NULL},
@@ -234,7 +231,6 @@ static GtkItemFactoryEntry filer_menu_def[] = {
 {N_("New"),			NULL, NULL, 0, "<Branch>"},
 {">" N_("Directory"),		NULL, new_directory, 0, NULL},
 {">" N_("Blank file"),		NULL, new_file, 0, "<StockItem>", GTK_STOCK_NEW},
-{">" N_("Customise Menu..."),	NULL, customise_new, 0, NULL},
 {N_("Window"),			NULL, NULL, 0, "<Branch>"},
 {">" N_("Parent, New Window"), 	NULL, open_parent, 0, "<StockItem>", GTK_STOCK_GO_UP},
 {">" N_("Parent, Same Window"), NULL, open_parent_same, 0, NULL},
@@ -871,14 +867,7 @@ void menu_show_shift_action(GtkWidget *menu_item, DirItem *item, gboolean next)
 
 	if (item)
 	{
-		if (item->flags & ITEM_FLAG_MOUNT_POINT)
-		{
-			if (item->flags & ITEM_FLAG_MOUNTED)
-				shift_action = N_("Unmount");
-			else
-				shift_action = N_("Open unmounted");
-		}
-		else if (item->flags & ITEM_FLAG_SYMLINK)
+		if (item->flags & ITEM_FLAG_SYMLINK)
 			shift_action = N_("Show Target");
 		else if (item->base_type == TYPE_DIRECTORY)
 			shift_action = N_("Look Inside");
@@ -1508,93 +1497,6 @@ static void new_file_type(gchar *templ)
 		new_file_type_cb, GDK_ACTION_COPY);
 }
 
-static void customise_send_to(gpointer data)
-{
-	GPtrArray	*path;
-	guchar		*save;
-	GString		*dirs;
-	int		i;
-
-	dirs = g_string_new(NULL);
-
-	path = choices_list_xdg_dirs("", SITE);
-	for (i = 0; i < path->len; i++)
-	{
-		guchar *old = (guchar *) path->pdata[i];
-
-		g_string_append(dirs, old);
-		g_string_append(dirs, "/SendTo\n");
-	}
-	choices_free_list(path);
-
-	save = choices_find_xdg_path_save("", "SendTo", SITE, TRUE);
-	if (save)
-		mkdir(save, 0777);
-
-	info_message(
-		_("The `Send To' menu provides a quick way to send some files "
-		"to an application. The applications listed are those in "
-		"the following directories:\n\n%s\n%s\n"
-		"The `Send To' menu may be opened by Shift+Menu clicking "
-		"over a file.\n\n"
-		"Advanced use:\n"
-		"You can also create subdirectories called "
-		"`.text_html', `.text', etc which will only be "
-		"shown for files of that type. `.group' is shown "
-		"only when multiple files are selected."),
-		dirs->str,
-		save ? _("I'll show you your SendTo directory now; you should "
-			"symlink (Ctrl+Shift drag) any applications you want "
-			"into it.")
-		     : _("Your CHOICESPATH variable setting prevents "
-			 "customisations - sorry."));
-
-	g_string_free(dirs, TRUE);
-	
-	if (save)
-		filer_opendir(save, NULL, NULL);
-}
-
-static void customise_new(gpointer data)
-{
-	GPtrArray	*path;
-	guchar		*save;
-	GString		*dirs;
-	int		i;
-
-	dirs = g_string_new(NULL);
-
-	path = choices_list_xdg_dirs("", SITE);
-	for (i = 0; i < path->len; i++)
-	{
-		guchar *old = (guchar *) path->pdata[i];
-
-		g_string_append(dirs, old);
-		g_string_append(dirs, "/Templates\n");
-	}
-	choices_free_list(path);
-
-	save = choices_find_xdg_path_save("", "Templates", SITE, TRUE);
-	if (save)
-		mkdir(save, 0777);
-
-	info_message(
-		_("Any files placed in your Templates directories will "
-		"appear on the `New' menu. Choosing one of them will make "
-		"a copy of it as the new file.\n\n"
-		"The following directories contain templates:\n\n%s\n%s\n"),
-		dirs->str,
-		save ? _("I'll show you your Templates directory now; you "
-			 "should place any template files you want inside it.")
-		     : _("Your CHOICESPATH variable setting prevents "
-			 "customisations - sorry."));
-
-	g_string_free(dirs, TRUE);
-	
-	if (save)
-		filer_opendir(save, NULL, NULL);
-}
-
 /* Add everything in the directory <Choices>/SendTo/[.type[_subtype]] 
  * to the menu.
  */
@@ -1700,11 +1602,6 @@ static void show_send_to_menu(GList *paths, GdkEvent *event)
 	}
 	
 	add_sendto(menu, NULL, NULL);
-
-	item = gtk_menu_item_new_with_label(_("Customise"));
-	g_signal_connect_swapped(item, "activate",
-				G_CALLBACK(customise_send_to), NULL);
-	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
 
 	if (send_to_paths)
 		destroy_glist(&send_to_paths);

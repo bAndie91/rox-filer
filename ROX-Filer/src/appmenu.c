@@ -105,15 +105,6 @@ int appmenu_add(const gchar *app_dir, DirItem *app_item, GtkWidget *menu)
 
 	build_app_menu(app_dir, app_item);
 
-	if (app_item->flags & ITEM_FLAG_MOUNT_POINT)
-	{
-		GtkWidget *item;
-		item = gtk_menu_item_new_with_label(_("Eject"));
-		gtk_widget_show(item);
-		current_items = g_list_prepend(current_items, item);
-		g_signal_connect(item, "activate", G_CALLBACK(mnt_eject), NULL);
-	}
-
 	if (current_items)
 	{
 		sep = gtk_menu_item_new();
@@ -303,24 +294,6 @@ static void mnt_eject(GtkWidget *item, gpointer data)
 	g_list_free(dirs);
 }
 
-static void customise_type(GtkWidget *item, MIME_type *type)
-{
-	char *leaf;
-	char *path;
-
-	leaf = g_strconcat(".", type->media_type, "_", type->subtype, NULL);
-	path = choices_find_xdg_path_save(leaf, "SendTo", SITE, TRUE);
-	g_free(leaf);
-
-	mkdir(path, 0755);
-	filer_opendir(path, NULL, NULL);
-	g_free(path);
-
-	info_message(_("Symlink any programs you want into this directory. "
-			"They will appear in the menu for all items of this "
-			"type (%s/%s)."), type->media_type, type->subtype);
-}
-
 static void build_menu_for_type(MIME_type *type, const int is_file)
 {
 	char *leaf;
@@ -341,9 +314,6 @@ static void build_menu_for_type(MIME_type *type, const int is_file)
 		g_free(leaf);
 	}
 
-	item = gtk_menu_item_new_with_label(_("Customise Menu..."));
-	current_items = g_list_prepend(current_items, item);
-	g_signal_connect(item, "activate", G_CALLBACK(customise_type), type);
 	gtk_widget_show(item);
 }
 
