@@ -13,6 +13,5 @@
 /* External interface */
 int appmenu_add(const gchar *app_dir, DirItem *item, GtkWidget *menu);
 void appmenu_remove(void);
-static void build_menu_for_type_add_item(char*);
 
 #endif   /* _APPMENU_H */
