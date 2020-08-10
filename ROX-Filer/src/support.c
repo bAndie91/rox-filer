@@ -1811,3 +1811,9 @@ int mkdir_recursive(const char *pathname, mode_t mode)
 	}
 	return ret;
 }
+
+gboolean is_dir(const char *dir)
+{
+	struct stat info;
+	return stat(dir, &info) == 0 && S_ISDIR(info.st_mode);
+}

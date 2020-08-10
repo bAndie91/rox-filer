@@ -1582,20 +1582,22 @@ static void build_send_to_menu(GList *paths, void(callback_func)(GtkWidget*, voi
 
 		add_sendto(callback_func, callback_data, item->mime_type->media_type, NULL);
 
-		// TODO: add '.file' if is_file
+		if (! is_dir(paths->data))
+			add_sendto(callback_func, callback_data, "file", NULL);
 		
 		diritem_free(item);
 	}
 	else
 	{
 		GList *rover;
-		gboolean same=TRUE, same_media=TRUE;
+		gboolean same=TRUE, same_media=TRUE, all_file=TRUE;
 		MIME_type *type=NULL;
 		DirItem	*item;
 		
 		item = diritem_new("");
 		for(rover=paths; rover; rover=g_list_next(rover))
 		{
+			if (is_dir(rover->data)) all_file = FALSE;
 			diritem_restat(rover->data, item, NULL);
 			if(!type)
 				type=item->mime_type;
@@ -1623,7 +1625,8 @@ static void build_send_to_menu(GList *paths, void(callback_func)(GtkWidget*, voi
 				add_sendto(callback_func, callback_data, type->media_type, NULL);
 		}
 		
-		// TODO: add '.file' if all is_file
+		if(all_file)
+			add_sendto(callback_func, callback_data, "file", NULL);
 		
 		add_sendto(callback_func, callback_data, "group", NULL);
 	}

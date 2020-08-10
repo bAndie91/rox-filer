@@ -250,7 +250,7 @@ def dispatch_child(cmdargs, shared):
 	shared.pid = pid
 	wait_on_success = 2000
 	close_on_end = not shared.xterm
-	fail_count = 0
+	shared.fail_count = 0
 	
 	os.close(stdin_read)
 	os.close(stdin_write)
@@ -367,9 +367,9 @@ def dispatch_child(cmdargs, shared):
 			msg += ", core dumped"
 		write_text(msg)
 		
-		if fail_count:
+		if shared.fail_count:
 			set_autoclose(False)
-			write_error("\n\n%d errors occured." % fail_count)
+			write_error("\n\n%d errors occured." % shared.fail_count)
 	
 	shared.success = success
 	if not success: set_autoclose(False)
@@ -518,9 +518,9 @@ def execute_commands(shared):
 						elif comm == 'endcode':
 							shared.blocktag = 'normal'
 						elif comm == 'fail':
-							fail_count += 1
+							shared.fail_count += 1
 							if shared.xterm:
-								Lab2.set_text("%d errors occured." % fail_count)
+								Lab2.set_text("%d errors occured." % shared.fail_count)
 								Lab2.show()
 			gtk.threads_leave()
 

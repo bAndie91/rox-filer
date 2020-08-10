@@ -54,6 +54,7 @@ static void apprun_menu(GtkWidget *item, gpointer data);
 static GtkWidget *create_menu_item(xmlNode *node);
 static void show_app_help(GtkWidget *item, gpointer data);
 static void build_app_menu(const char *app_dir, DirItem *app_item);
+static void build_menu_for_type_add_item(char *leaf);
 static void mnt_eject(GtkWidget *item, gpointer data);
 
 /* There can only be one menu open at a time... we store: */
@@ -361,12 +362,6 @@ static void build_menu_for_type_add_item(char *leaf)
 
 	g_ptr_array_free(names, TRUE);
 	g_free(path);
-}
-
-static inline gboolean is_dir(const char *dir)
-{
-	struct stat info;
-	return stat(dir, &info) == 0 && S_ISDIR(info.st_mode);
 }
 
 /* Adds to current_items */
