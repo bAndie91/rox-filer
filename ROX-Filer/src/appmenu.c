@@ -348,7 +348,7 @@ static void build_menu_for_type_add_item(char *leaf)
 			GList *new_widgets;
 			MenuIconStyle style = get_menu_icon_style();
 			gchar *fname = g_strconcat(full_path, NULL);
-			new_widgets = menu_from_dir(build_menu_append_cb, sub, fname, style, send_to, FALSE, FALSE, TRUE, TRUE);
+			new_widgets = menu_from_dir(build_menu_append_cb, sub, fname, "/", style, send_to, FALSE, FALSE, TRUE, TRUE);
 			g_list_free(new_widgets);
 			gtk_menu_item_set_submenu(GTK_MENU_ITEM(item), sub);
 		}

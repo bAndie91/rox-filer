@@ -476,7 +476,7 @@ GtkWidget *make_send_to_item(DirItem *ditem, const char *label,
 void dummy_func(void*x){}
 
 //static
-GList *menu_from_dir(void(callback_func)(GtkWidget*, void*), void* callback_data, const gchar *dir_name,
+GList *menu_from_dir(void(callback_func)(GtkWidget*, void*), void* callback_data, const gchar *root_dir_path, const gchar *sub_dir_path /* with leading slash */,
 			    MenuIconStyle style, CallbackFn func,
 			    gboolean separator, gboolean strip_ext,
 			    gboolean recurse, gboolean signal_connect_method_is_data)
@@ -486,11 +486,13 @@ GList *menu_from_dir(void(callback_func)(GtkWidget*, void*), void* callback_data
 	int i;
 	GtkWidget *item;
 	char *dname = NULL;
+	char *dir_realpath = NULL;
 	GPtrArray *names;
 
-	dname = pathdup(dir_name);
+	dname = pathdup(root_dir_path);
+	dir_realpath = g_strconcat(dname, sub_dir_path, NULL);
 
-	names = list_dir(dname);
+	names = list_dir(dir_realpath);
 	if (!names)
 		goto out;
 
@@ -507,7 +509,7 @@ GList *menu_from_dir(void(callback_func)(GtkWidget*, void*), void* callback_data
 			separator = FALSE;
 		}
 
-		fname = g_strconcat(dname, "/", leaf, NULL);
+		fname = g_strconcat(dir_realpath, "/", leaf, NULL);
 
 		/* Strip off extension, if any */
 		if (strip_ext)
@@ -521,9 +523,8 @@ GList *menu_from_dir(void(callback_func)(GtkWidget*, void*), void* callback_data
 		ditem = diritem_new("");
 		diritem_restat(fname, ditem, NULL);
 
-		item = make_send_to_item(ditem, leaf, style);
-
-		g_free(leaf);
+		item = make_send_to_item(ditem, /* label= */ leaf, style);
+		g_object_set_data_full(G_OBJECT(item), "parent-menu-path", g_strdup(sub_dir_path), g_free);
 
 		/* If it is a directory (but NOT an AppDir) and we are
 		 * recursing then set up a sub menu.
@@ -533,11 +534,14 @@ GList *menu_from_dir(void(callback_func)(GtkWidget*, void*), void* callback_data
 		{
 			GtkWidget *sub;
 			GList *new_widgets;
+			gchar *sub_sub_dir_path;
 
-			sub = gtk_menu_new();
-			new_widgets = menu_from_dir(build_menu_append_cb, (void*)sub, fname, style, func,
+			sub_sub_dir_path = g_strconcat(sub_dir_path, "/", leaf, NULL);
+			sub = gtk_menu_new();  // TODO: use an existing submenu if parent-menu-path and menu item label match
+			new_widgets = menu_from_dir(build_menu_append_cb, (void*)sub, root_dir_path, sub_sub_dir_path, style, func,
 						separator, strip_ext, TRUE, signal_connect_method_is_data);
-			g_list_free(new_widgets);  // FIXME: how these menu item widgets get dereferenced nd freed?
+			g_list_free(new_widgets);  // FIXME: how these menu item widgets get dereferenced and freed?
+			g_free(sub_sub_dir_path);
 			gtk_menu_item_set_submenu(GTK_MENU_ITEM(item), sub);
 		}
 		else if(signal_connect_method_is_data)
@@ -546,6 +550,7 @@ GList *menu_from_dir(void(callback_func)(GtkWidget*, void*), void* callback_data
 			g_signal_connect_swapped(item, "activate",
 					G_CALLBACK(func), fname);
 
+		g_free(leaf);
 		diritem_free(ditem);
 
 		callback_func(item, callback_data);
@@ -557,6 +562,7 @@ GList *menu_from_dir(void(callback_func)(GtkWidget*, void*), void* callback_data
 
 	g_ptr_array_free(names, TRUE);
 out:
+	g_free(dir_realpath);
 	g_free(dname);
 
 	return widgets;
@@ -583,7 +589,7 @@ static void update_new_files_menu(MenuIconStyle style)
 	templ_dname = choices_find_xdg_path_load("Templates", "", SITE);
 	if (templ_dname)
 	{
-		widgets = menu_from_dir(build_menu_append_cb, (void*)filer_new_menu, templ_dname, style,
+		widgets = menu_from_dir(build_menu_append_cb, (void*)filer_new_menu, templ_dname, "/", style,
 					(CallbackFn) new_file_type, TRUE, TRUE,
 					FALSE, FALSE);
 		g_free(templ_dname);
@@ -1554,14 +1560,14 @@ static void add_sendto(void(callback_func)(GtkWidget*, void*), void* callback_da
 		GList	*widgets = NULL;
 		guchar	*dir = (guchar *) paths->pdata[i];
 
-		widgets = menu_from_dir(callback_func, callback_data, dir, get_menu_icon_style(),
+		widgets = menu_from_dir(callback_func, callback_data, dir, "/", get_menu_icon_style(),
 				(CallbackFn) do_send_to,
 				FALSE, FALSE, TRUE, FALSE);
 
 		if (widgets)
 			callback_func(gtk_menu_item_new(), callback_data);
 
-		g_list_free(widgets);	/* TODO: Get rid of this */
+		g_list_free(widgets);	/* TODO: Get rid of this */ /* ??? */
 	}
 
 	choices_free_list(paths);
