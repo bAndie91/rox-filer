@@ -44,6 +44,7 @@
 #include "choices.h"
 #include "options.h"
 #include "run.h"
+#include "filer.h"
 
 gint	screen_width, screen_height;
 
@@ -161,7 +162,7 @@ int get_choice(const char *title,
 		return -1;
 	}
 
-	current_dialog = dialog = gtk_message_dialog_new(NULL,
+	current_dialog = dialog = gtk_message_dialog_new(GTK_WINDOW(window_with_focus->window),
 					GTK_DIALOG_MODAL,
 					GTK_MESSAGE_QUESTION,
 					GTK_BUTTONS_NONE,
@@ -617,7 +618,7 @@ static void run_error_info_dialog(GtkMessageType type, const char *message,
 	s = g_strdup_vprintf(message, args);
 	va_end(args);
 
-	dialog = gtk_message_dialog_new(NULL,
+	dialog = gtk_message_dialog_new(GTK_WINDOW(window_with_focus->window),
 					GTK_DIALOG_MODAL,
 					type,
 					GTK_BUTTONS_OK,

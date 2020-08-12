@@ -84,6 +84,7 @@ GtkWidget* abox_new(const gchar *title, gboolean quiet)
 	gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(abox->quiet), quiet);
 
 	gtk_window_set_title(GTK_WINDOW(widget), title);
+	gtk_window_set_transient_for(GTK_WINDOW(widget), GTK_WINDOW(window_with_focus->window));
 	gtk_dialog_set_has_separator(GTK_DIALOG(widget), FALSE);
 
 	return widget;
