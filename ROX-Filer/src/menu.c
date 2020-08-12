@@ -178,6 +178,12 @@ static GtkWidget        *filer_new_menu;        /* The New submenu */
 static GtkWidget        *filer_follow_sym;      /* Follow symbolic links item */
 static GtkWidget        *filer_set_type;        /* Set type item */
 
+struct send_to_menu_builder {
+	GtkWidget* menu;
+	unsigned int pos;
+};
+static GList* sendto_menu_widgets = NULL;
+
 #undef N_
 #define N_(x) x
 
@@ -473,10 +479,42 @@ GtkWidget *make_send_to_item(DirItem *ditem, const char *label,
 	return item;
 }
 
+void build_menu_append_cb(GtkWidget* item, void* data)
+{
+	GtkWidget* menu;
+	menu = data;
+	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+}
+void send_to_menu_build_menu_cb(GtkWidget* item, void* cb_data)
+{
+	struct send_to_menu_builder* data;
+	data = (struct send_to_menu_builder*)cb_data;
+	gtk_menu_shell_insert(GTK_MENU_SHELL(data->menu), item, data->pos);
+	sendto_menu_widgets = g_list_prepend(sendto_menu_widgets, item);
+	data->pos++;
+}
+void sendto_menu_remove_items(void)
+{
+	GList *next;
+
+	for (next = sendto_menu_widgets; next; next = next->next)
+		gtk_widget_destroy((GtkWidget *) next->data);
+
+	g_list_free(sendto_menu_widgets);
+	sendto_menu_widgets = NULL;
+}
+static int compare_sendto_menu_widget_menu_path(gconstpointer subject, gconstpointer target)
+{
+	gpointer menu_path;
+	menu_path = g_object_get_data(G_OBJECT(subject), "menu-path");
+	if(menu_path != NULL && g_strcmp0(menu_path, target)==0 && gtk_menu_item_get_submenu(GTK_MENU_ITEM(subject)) != NULL) return 0;
+	return -1;
+}
+
 void dummy_func(void*x){}
 
 //static
-GList *menu_from_dir(void(callback_func)(GtkWidget*, void*), void* callback_data, const gchar *root_dir_path, const gchar *sub_dir_path /* with leading slash */,
+GList *menu_from_dir(void(callback_func)(GtkWidget*, void*), void* callback_data, const gchar *root_dir_path, const gchar *sub_dir_path /* NULL if root */,
 			    MenuIconStyle style, CallbackFn func,
 			    gboolean separator, gboolean strip_ext,
 			    gboolean recurse, gboolean signal_connect_method_is_data)
@@ -488,6 +526,7 @@ GList *menu_from_dir(void(callback_func)(GtkWidget*, void*), void* callback_data
 	char *dname = NULL;
 	char *dir_realpath = NULL;
 	GPtrArray *names;
+	gchar *sub_sub_dir_path;
 
 	dname = pathdup(root_dir_path);
 	dir_realpath = g_strconcat(dname, sub_dir_path, NULL);
@@ -500,6 +539,7 @@ GList *menu_from_dir(void(callback_func)(GtkWidget*, void*), void* callback_data
 	{
 		char	*leaf = names->pdata[i];
 		gchar	*fname;
+		gboolean is_new_menu = TRUE;
 
 		if (separator)
 		{
@@ -524,7 +564,10 @@ GList *menu_from_dir(void(callback_func)(GtkWidget*, void*), void* callback_data
 		diritem_restat(fname, ditem, NULL);
 
 		item = make_send_to_item(ditem, /* label= */ leaf, style);
-		g_object_set_data_full(G_OBJECT(item), "parent-menu-path", g_strdup(sub_dir_path), g_free);
+		sub_sub_dir_path = g_strconcat(sub_dir_path == NULL ? "" : sub_dir_path, "/", leaf, NULL);
+		g_object_set_data_full(G_OBJECT(item), "menu-path", g_strdup(sub_sub_dir_path), g_free);
+		
+		g_free(leaf);
 
 		/* If it is a directory (but NOT an AppDir) and we are
 		 * recursing then set up a sub menu.
@@ -532,17 +575,23 @@ GList *menu_from_dir(void(callback_func)(GtkWidget*, void*), void* callback_data
 		if (recurse && ditem->base_type == TYPE_DIRECTORY &&
 			   !(ditem->flags & ITEM_FLAG_APPDIR))
 		{
-			GtkWidget *sub;
+			GtkWidget *sub = NULL;
 			GList *new_widgets;
-			gchar *sub_sub_dir_path;
+			GList *existing_menu_item_widget;
 
-			sub_sub_dir_path = g_strconcat(sub_dir_path, "/", leaf, NULL);
-			sub = gtk_menu_new();  // TODO: use an existing submenu if parent-menu-path and menu item label match
+			existing_menu_item_widget = g_list_find_custom(sendto_menu_widgets, sub_sub_dir_path, compare_sendto_menu_widget_menu_path);
+			if(existing_menu_item_widget != NULL) {
+				sub = gtk_menu_item_get_submenu(GTK_MENU_ITEM(existing_menu_item_widget->data));
+				is_new_menu = FALSE;
+			}
+			else {
+				sub = gtk_menu_new();
+			}
 			new_widgets = menu_from_dir(build_menu_append_cb, (void*)sub, root_dir_path, sub_sub_dir_path, style, func,
 						separator, strip_ext, TRUE, signal_connect_method_is_data);
 			g_list_free(new_widgets);  // FIXME: how these menu item widgets get dereferenced and freed?
-			g_free(sub_sub_dir_path);
-			gtk_menu_item_set_submenu(GTK_MENU_ITEM(item), sub);
+			if(is_new_menu)
+				gtk_menu_item_set_submenu(GTK_MENU_ITEM(item), sub);
 		}
 		else if(signal_connect_method_is_data)
 			g_signal_connect_data(item, "activate", G_CALLBACK(func), fname, (GClosureNotify)dummy_func, 0);
@@ -550,14 +599,18 @@ GList *menu_from_dir(void(callback_func)(GtkWidget*, void*), void* callback_data
 			g_signal_connect_swapped(item, "activate",
 					G_CALLBACK(func), fname);
 
-		g_free(leaf);
+		g_free(sub_sub_dir_path);
 		diritem_free(ditem);
 
-		callback_func(item, callback_data);
-		g_signal_connect_swapped(item, "destroy",
-				G_CALLBACK(g_free), fname);
-
-		widgets = g_list_append(widgets, item);
+		if(is_new_menu) {
+			callback_func(item, callback_data);
+			g_signal_connect_swapped(item, "destroy", G_CALLBACK(g_free), fname);
+			widgets = g_list_append(widgets, item);
+		}
+		else {
+			gtk_widget_destroy(item);
+			g_free(fname);
+		}
 	}
 
 	g_ptr_array_free(names, TRUE);
@@ -589,7 +642,7 @@ static void update_new_files_menu(MenuIconStyle style)
 	templ_dname = choices_find_xdg_path_load("Templates", "", SITE);
 	if (templ_dname)
 	{
-		widgets = menu_from_dir(build_menu_append_cb, (void*)filer_new_menu, templ_dname, "/", style,
+		widgets = menu_from_dir(build_menu_append_cb, (void*)filer_new_menu, templ_dname, NULL, style,
 					(CallbackFn) new_file_type, TRUE, TRUE,
 					FALSE, FALSE);
 		g_free(templ_dname);
@@ -682,30 +735,6 @@ MenuIconStyle get_menu_icon_style(void)
 	}
 
 	return MIS_SMALL;
-}
-
-struct send_to_menu_builder {
-	GtkWidget* menu;
-	unsigned int pos;
-};
-static GList* sendto_menu_widgets = NULL;
-void send_to_menu_build_menu_cb(GtkWidget* item, void* cb_data)
-{
-	struct send_to_menu_builder* data;
-	data = (struct send_to_menu_builder*)cb_data;
-	gtk_menu_shell_insert(GTK_MENU_SHELL(data->menu), item, data->pos);
-	sendto_menu_widgets = g_list_prepend(sendto_menu_widgets, item);
-	data->pos++;
-}
-void sendto_menu_remove_items(void)
-{
-	GList *next;
-
-	for (next = sendto_menu_widgets; next; next = next->next)
-		gtk_widget_destroy((GtkWidget *) next->data);
-
-	g_list_free(sendto_menu_widgets);
-	sendto_menu_widgets = NULL;
 }
 
 /* iter->peek() is the clicked item, or NULL if none */
@@ -1560,7 +1589,7 @@ static void add_sendto(void(callback_func)(GtkWidget*, void*), void* callback_da
 		GList	*widgets = NULL;
 		guchar	*dir = (guchar *) paths->pdata[i];
 
-		widgets = menu_from_dir(callback_func, callback_data, dir, "/", get_menu_icon_style(),
+		widgets = menu_from_dir(callback_func, callback_data, dir, NULL, get_menu_icon_style(),
 				(CallbackFn) do_send_to,
 				FALSE, FALSE, TRUE, FALSE);
 
@@ -1643,13 +1672,6 @@ static void build_send_to_menu(GList *paths, void(callback_func)(GtkWidget*, voi
 		destroy_glist(&send_to_paths);
 
 	send_to_paths = paths;
-}
-
-void build_menu_append_cb(GtkWidget* item, void* data)
-{
-	GtkWidget* menu;
-	menu = data;
-	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
 }
 
 /* Scan the SendTo dir and create and show the Send To menu.
