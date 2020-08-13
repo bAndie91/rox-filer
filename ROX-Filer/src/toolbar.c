@@ -524,64 +524,26 @@ static GtkWidget* rox_sort_menu;
 
 static void toolbar_sort_clicked(GtkWidget *widget, FilerWindow *filer_window)
 {
-	if (rox_sort_menu == NULL) rox_sort_menu = make_rox_sort_menu();
-	
-	gtk_container_foreach(GTK_CONTAINER(rox_sort_menu), rox_sort_menu_items_update, (gpointer)filer_window);
-	
-	gtk_widget_show_all(rox_sort_menu);
-	gtk_menu_popup(GTK_MENU(rox_sort_menu), NULL, NULL, NULL, NULL, gtk_get_current_event_button(), gtk_get_current_event_time());
-}
-
-/*
 	GdkEventButton	*bev;
-	int i, current, next, backward;
-	gboolean change_dir;
-	GtkSortType dir;
-	gchar *tip;
-
+	
 	bev = (GdkEventButton *) get_current_event(GDK_BUTTON_RELEASE);
-	change_dir = (bev->button != 1) && bev->type == GDK_BUTTON_RELEASE;
-	backward = (bev->button == 3) && bev->type == GDK_BUTTON_RELEASE;
-	gdk_event_free((GdkEvent *) bev);
-
-	current = -1;
-	dir = filer_window->sort_order;
-	for (i=0; i < G_N_ELEMENTS(sort_names); i++)
+	if((bev->button == 2) && bev->type == GDK_BUTTON_RELEASE)
 	{
-		if (filer_window->sort_type == sorts[i])
-		{
-			current = i;
-			break;
-		}
-	}
-
-	if(backward)
-	{
-		next = current - 1;
-		if(next < 0) next = G_N_ELEMENTS(sorts) - 1;
-	}
-	else if (change_dir)
-	{
-		dir = (dir == GTK_SORT_ASCENDING)
-			? GTK_SORT_DESCENDING : GTK_SORT_ASCENDING;
-		if(current == -1) next = 0;
-		else next = current;
+		/* middle button pressed, switch sort order */
+		display_set_sort_type(filer_window, filer_window->sort_type, filer_window->sort_order == GTK_SORT_ASCENDING ? GTK_SORT_DESCENDING : GTK_SORT_ASCENDING);
 	}
 	else
 	{
-		next = current + 1;
-		if(next >= G_N_ELEMENTS(sorts)) next = 0;
+		if (rox_sort_menu == NULL) rox_sort_menu = make_rox_sort_menu();
+		
+		gtk_container_foreach(GTK_CONTAINER(rox_sort_menu), rox_sort_menu_items_update, (gpointer)filer_window);
+		
+		gtk_widget_show_all(rox_sort_menu);
+		gtk_menu_popup(GTK_MENU(rox_sort_menu), NULL, NULL, NULL, NULL, gtk_get_current_event_button(), gtk_get_current_event_time());
 	}
-
-	display_set_sort_type(filer_window, sorts[next], dir);
-	tip = g_strconcat(_(sort_names[next]), ", ",
-			dir == GTK_SORT_ASCENDING 
-				? _("ascending") : _("descending"),
-			NULL);
-	tooltip_show(tip);
-	g_free(tip);
+	
+	gdk_event_free((GdkEvent *) bev);
 }
-*/
 
 static void toolbar_details_clicked(GtkWidget *widget,
 				    FilerWindow *filer_window)
