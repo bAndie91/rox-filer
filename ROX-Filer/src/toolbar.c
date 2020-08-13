@@ -446,61 +446,93 @@ static void toolbar_size_clicked(GtkWidget *widget, FilerWindow *filer_window)
 	gdk_event_free((GdkEvent *) bev);
 }
 
-static void toolbar_sort_clicked(GtkWidget *widget, FilerWindow *filer_window)
+static const SortType rox_sort_sorts[]={
+	SORT_NAME, SORT_TYPE, SORT_DATE, SORT_SIZE,
+	SORT_OWNER, SORT_GROUP, 
+};
+static const char *rox_sort_names[] = {
+	N_("Sort by name"), N_("Sort by type"), N_("Sort by date"), 
+	N_("Sort by size"), N_("Sort by owner"), N_("Sort by group"), 
+};
+static const GtkSortType rox_sort_orders[] = {
+	GTK_SORT_ASCENDING, GTK_SORT_DESCENDING,
+};
+static struct sort_callback_data {
+	FilerWindow *filer_window;
+	SortType sort;
+	GtkSortType order;
+};
+
+static void toolbar_sort_menuitem_clicked(GtkMenuShell *item, struct sort_callback_data* sorting)
+{
+	display_set_sort_type(sorting->filer_window, sorting->sort, sorting->order);
+}
+
+static GtkWidget* make_rox_sort_menu()
 {
 	GtkWidget *sort_menu;
 	GtkWidget *sort_item;
-	GtkSortType dir;
 	int i, j;
 	gchar *label;
 	
-	static const SortType sorts[]={
-		SORT_NAME, SORT_TYPE, SORT_DATE, SORT_SIZE,
-		SORT_OWNER, SORT_GROUP, 
-	};
-	static const char *sort_names[] = {
-		N_("Sort by name"), N_("Sort by type"), N_("Sort by date"), 
-		N_("Sort by size"), N_("Sort by owner"), N_("Sort by group"), 
-	};
-	static const int sort_orders[] = {
-		GTK_SORT_ASCENDING, GTK_SORT_DESCENDING,
-	};
-	
 	sort_menu = gtk_menu_new();
-	dir = filer_window->sort_order;
 	
-	for (i=0; i < G_N_ELEMENTS(sort_names); i++)
+	for (i=0; i < G_N_ELEMENTS(rox_sort_names); i++)
 	{
-		for (j=0; j < G_N_ELEMENTS(sort_orders); j++)
+		for (j=0; j < G_N_ELEMENTS(rox_sort_orders); j++)
 		{
-			label = g_strconcat(_(sort_names[i]), ", ",
-				sort_orders[j] == GTK_SORT_ASCENDING ? _("ascending") : _("descending"),
+			label = g_strconcat(_(rox_sort_names[i]), ", ",
+				rox_sort_orders[j] == GTK_SORT_ASCENDING ? _("ascending") : _("descending"),
 				NULL);
 			
-			if (filer_window->sort_type == sorts[i] && dir == sort_orders[j])
-			{
-				sort_item = gtk_check_menu_item_new_with_label(label);
-				gtk_check_menu_item_set_draw_as_radio(GTK_CHECK_MENU_ITEM(sort_item), TRUE);
-				gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(sort_item), TRUE);
-			}
-			else
-			{
-				sort_item = gtk_menu_item_new_with_label(label);
-			}
+			sort_item = gtk_check_menu_item_new_with_label(label);
+			gtk_check_menu_item_set_draw_as_radio(GTK_CHECK_MENU_ITEM(sort_item), TRUE);
 		
 			g_free(label);
 		
 			gtk_menu_shell_append(GTK_MENU_SHELL(sort_menu), sort_item);
+			
+			struct sort_callback_data *data;
+			data = g_malloc(sizeof(struct sort_callback_data));  /* never freed */
+			data->filer_window = NULL;  /* maintained by rox_sort_menu_items_update() */
+			data->sort = rox_sort_sorts[i];
+			data->order = rox_sort_orders[j];
+			
+			g_object_set_data(G_OBJECT(sort_item), "sort", (gpointer)data);
+			g_signal_connect(sort_item, "activate", G_CALLBACK(toolbar_sort_menuitem_clicked), (gpointer)data);
 		}
 	}
 	
-	gtk_widget_show_all(sort_menu);
-	gtk_menu_popup(GTK_MENU_SHELL(sort_menu), NULL, NULL, NULL, NULL, gtk_get_current_event_button(), gtk_get_current_event_time());
+	return sort_menu;
 }
 
-static void toolbar_sort_menuitem_clicked(GtkWidget *widget,
-				    FilerWindow *filer_window)
+void rox_sort_menu_items_update(GtkWidget *menuitem, gpointer data)
 {
+	FilerWindow* filer_window;
+	struct sort_callback_data* this_sorting;
+	
+	filer_window = (FilerWindow*)data;
+	this_sorting = (struct sort_callback_data*)g_object_get_data(G_OBJECT(menuitem), "sort");
+	this_sorting->filer_window = filer_window;
+	
+	g_signal_handlers_block_by_func(menuitem, G_CALLBACK(toolbar_sort_menuitem_clicked), (gpointer)this_sorting);
+	gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(menuitem), this_sorting->sort == filer_window->sort_type && this_sorting->order == filer_window->sort_order);
+	g_signal_handlers_unblock_by_func(menuitem, G_CALLBACK(toolbar_sort_menuitem_clicked), (gpointer)this_sorting);
+}
+
+static GtkWidget* rox_sort_menu;
+
+static void toolbar_sort_clicked(GtkWidget *widget, FilerWindow *filer_window)
+{
+	if (rox_sort_menu == NULL) rox_sort_menu = make_rox_sort_menu();
+	
+	gtk_container_foreach(GTK_CONTAINER(rox_sort_menu), rox_sort_menu_items_update, (gpointer)filer_window);
+	
+	gtk_widget_show_all(rox_sort_menu);
+	gtk_menu_popup(GTK_MENU(rox_sort_menu), NULL, NULL, NULL, NULL, gtk_get_current_event_button(), gtk_get_current_event_time());
+}
+
+/*
 	GdkEventButton	*bev;
 	int i, current, next, backward;
 	gboolean change_dir;
@@ -512,7 +544,6 @@ static void toolbar_sort_menuitem_clicked(GtkWidget *widget,
 	backward = (bev->button == 3) && bev->type == GDK_BUTTON_RELEASE;
 	gdk_event_free((GdkEvent *) bev);
 
-/*
 	current = -1;
 	dir = filer_window->sort_order;
 	for (i=0; i < G_N_ELEMENTS(sort_names); i++)
@@ -549,8 +580,8 @@ static void toolbar_sort_menuitem_clicked(GtkWidget *widget,
 			NULL);
 	tooltip_show(tip);
 	g_free(tip);
-*/
 }
+*/
 
 static void toolbar_details_clicked(GtkWidget *widget,
 				    FilerWindow *filer_window)
