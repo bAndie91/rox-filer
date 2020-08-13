@@ -101,5 +101,6 @@ gint current_event_button(void);
 GdkPixbuf *create_spotlight_pixbuf(GdkPixbuf *src, GdkColor *color);
 GtkBuilder *get_gtk_builder(gchar **ids);
 void add_stock_to_menu_item(GtkWidget *item, const char *stock);
+int gtk_get_current_event_button();
 
 #endif /* _GUI_SUPPORT_H */

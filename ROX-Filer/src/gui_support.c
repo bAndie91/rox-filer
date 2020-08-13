@@ -1747,3 +1747,19 @@ void add_stock_to_menu_item(GtkWidget *item, const char *stock)
 	gtk_image_menu_item_set_image(GTK_IMAGE_MENU_ITEM(item),
 			gtk_image_new_from_stock(stock, GTK_ICON_SIZE_MENU));
 }
+
+int gtk_get_current_event_button()
+{
+	GdkEvent *event;
+	int	button = 0;
+
+	event = gtk_get_current_event();
+	if (event)
+	{
+		if (event->type == GDK_BUTTON_RELEASE ||
+		    event->type == GDK_BUTTON_PRESS)
+			button = ((GdkEventButton *) event)->button;
+		gdk_event_free(event);
+	}
+	return button;
+}
