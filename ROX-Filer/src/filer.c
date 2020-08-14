@@ -625,8 +625,8 @@ static gboolean may_rescan(FilerWindow *filer_window, gboolean warning)
 	{
 		if (warning)
 			info_message(_("Directory missing/deleted"));
-		gtk_widget_destroy(filer_window->window);
-		return FALSE;
+		change_to_first_existing_parent(filer_window);
+		return TRUE;
 	}
 	if (dir == filer_window->directory)
 		g_object_unref(dir);
@@ -1187,6 +1187,44 @@ void change_to_parent(FilerWindow *filer_window)
 	dir = g_path_get_dirname(current);
 	filer_change_to(filer_window, dir, g_basename(current));
 	g_free(dir);
+}
+
+void change_to_first_existing_parent(FilerWindow *filer_window)
+{
+	char	*dir;
+	char	*current;
+	char	*real_path;
+	Directory *new_dir;
+	
+	current = g_strdup(filer_window->sym_path);
+	
+	while(1)
+	{
+		if (current[0] == '/' && current[1] == '\0')
+		{
+			g_free(current);
+			filer_change_to(filer_window, "/", NULL);
+			return;		/* Already in the root */
+		}
+		
+		dir = g_path_get_dirname(current);
+		real_path = pathdup(dir);
+		new_dir  = g_fscache_lookup(dir_cache, real_path);
+		g_free(real_path);
+		
+		if (new_dir)
+		{
+			filer_change_to(filer_window, dir, g_basename(current));
+			g_free(current);
+			g_free(dir);
+			break;
+		}
+		else
+		{
+			current = g_strdup(dir);
+			g_free(dir);
+		}
+	}
 }
 
 /* Removes trailing /s from path (modified in place) */
